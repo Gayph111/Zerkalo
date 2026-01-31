@@ -1606,21 +1606,26 @@
         }
         
         function updateOnlineStatus() {
-            // Обновляем статус текущего пользователя
-            const userStatus = document.getElementById('userStatusIndicator');
-            if (userStatus) {
-                userStatus.className = 'status-indicator status-online';
-            }
-            
-            // Считаем онлайн пользователей
-            onlineUsers.add(currentUser.id);
-            document.getElementById('onlineCount')?.textContent = `${onlineUsers.size} онлайн`;
-            
-            // Обновляем админ-панель
-            if (document.getElementById('adminOnlineUsers')) {
-                document.getElementById('adminOnlineUsers').textContent = onlineUsers.size;
-            }
-        }
+			// Обновляем статус текущего пользователя
+			const userStatus = document.getElementById('userStatusIndicator');
+			if (userStatus) {
+				userStatus.className = 'status-indicator status-online';
+			}
+			
+			// Считаем онлайн пользователей
+			onlineUsers.add(currentUser.id);
+			
+			// БЕЗ ОПЦИОНАЛЬНОЙ ЦЕПОЧКИ В ЛЕВОЙ ЧАСТИ ПРИСВАИВАНИЯ!
+			const onlineCountElement = document.getElementById('onlineCount');
+			if (onlineCountElement) {
+				onlineCountElement.textContent = `${onlineUsers.size} онлайн`;
+			}
+			
+			// Обновляем админ-панель
+			if (document.getElementById('adminOnlineUsers')) {
+				document.getElementById('adminOnlineUsers').textContent = onlineUsers.size;
+			}
+		}
         
         // ========== ПОСТЫ ==========
         function loadPosts() {
@@ -2200,58 +2205,58 @@
         }
         
         function loadOnlineUsers() {
-            const onlineUsersList = document.getElementById('onlineUsersList');
-            if (!onlineUsersList) return;
-            
-            onlineUsersList.innerHTML = '';
-            
-            const onlineUsersArray = users
-                .filter(user => onlineUsers.has(user.id) && user.id !== currentUser.id)
-                .slice(0, 5);
-            
-            if (onlineUsersArray.length === 0) {
-                onlineUsersList.innerHTML = '<div style="color: var(--text-light); text-align: center;">Нет пользователей онлайн</div>';
-                return;
-            }
-            
-            onlineUsersArray.forEach(user => {
-                const userElement = document.createElement('div');
-                userElement.style.display = 'flex';
-                userElement.style.alignItems = 'center';
-                userElement.style.gap = '10px';
-                userElement.style.padding = '8px';
-                userElement.style.borderRadius = '8px';
-                userElement.style.transition = 'background-color 0.2s';
-                userElement.dataset.userId = user.id;
-                
-                userElement.innerHTML = `
-                    <div class="emoji-avatar" style="font-size: 1.5rem; width: 35px; height: 35px;">
-                        ${user.emoji}
-                        <div class="status-indicator status-online"></div>
-                    </div>
-                    <div style="flex: 1;">
-                        <div style="font-weight: 600; font-size: 0.9rem;">${user.username}</div>
-                    </div>
-                    <button class="btn-icon" title="Посмотреть профиль" data-action="view-profile">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                `;
-                
-                onlineUsersList.appendChild(userElement);
-                
-                userElement.addEventListener('mouseenter', () => {
-                    userElement.style.backgroundColor = 'var(--secondary)';
-                });
-                
-                userElement.addEventListener('mouseleave', () => {
-                    userElement.style.backgroundColor = 'transparent';
-                });
-                
-                userElement.querySelector('[data-action="view-profile"]').addEventListener('click', () => {
-                    viewUserProfile(user.id);
-                });
-            });
-        }
+			const onlineUsersList = document.getElementById('onlineUsersList');
+			if (!onlineUsersList) return;
+			
+			onlineUsersList.innerHTML = '';
+			
+			const onlineUsersArray = users
+				.filter(user => onlineUsers.has(user.id) && user.id !== currentUser.id)
+				.slice(0, 5);
+			
+			if (onlineUsersArray.length === 0) {
+				onlineUsersList.innerHTML = '<div style="color: var(--text-light); text-align: center;">Нет пользователей онлайн</div>';
+				return;
+			}
+			
+			onlineUsersArray.forEach(user => {
+				const userElement = document.createElement('div');
+				userElement.style.display = 'flex';
+				userElement.style.alignItems = 'center';
+				userElement.style.gap = '10px';
+				userElement.style.padding = '8px';
+				userElement.style.borderRadius = '8px';
+				userElement.style.transition = 'background-color 0.2s';
+				userElement.dataset.userId = user.id;
+				
+				userElement.innerHTML = `
+					<div class="emoji-avatar" style="font-size: 1.5rem; width: 35px; height: 35px;">
+						${user.emoji}
+						<div class="status-indicator status-online"></div>
+					</div>
+					<div style="flex: 1;">
+						<div style="font-weight: 600; font-size: 0.9rem;">${user.username}</div>
+					</div>
+					<button class="btn-icon" title="Посмотреть профиль" data-action="view-profile">
+						<i class="fas fa-eye"></i>
+					</button>
+				`;
+				
+				onlineUsersList.appendChild(userElement);
+				
+				userElement.addEventListener('mouseenter', () => {
+					userElement.style.backgroundColor = 'var(--secondary)';
+				});
+				
+				userElement.addEventListener('mouseleave', () => {
+					userElement.style.backgroundColor = 'transparent';
+				});
+				
+				userElement.querySelector('[data-action="view-profile"]').addEventListener('click', () => {
+					viewUserProfile(user.id);
+				});
+			});
+		}
         
         // ========== АДМИН ПАНЕЛЬ ==========
         function loadAdminPanel() {
