@@ -1573,71 +1573,59 @@
         
         // ========== SUPABASE ФУНКЦИИ ==========
         async function initializeSupabase() {
-            try {
-                // Проверяем сохраненный токен
-                const savedToken = localStorage.getItem('mirror_token');
-                const savedUser = localStorage.getItem('mirror_user');
-                
-                if (savedToken && savedUser) {
-                    currentToken = savedToken;
-                    currentUser = JSON.parse(savedUser);
-                    
-                    // Обновляем сессию
-                    const { data: { session }, error } = await supabase.auth.getSession();
-                    if (session) {
-                        currentUser = session.user;
-                        await loadInitialData();
-                        showMainApp();
-                        return;
-                    }
-                }
-                
-                showAuthPage();
-            } catch (error) {
-                console.error('Ошибка инициализации:', error);
-                showNotification('Ошибка', 'Не удалось загрузить данные', 'error');
-                showAuthPage();
-            }
-        }
-        
-        async function loadInitialData() {
-            try {
-                // Загружаем пользователей
-                const { data: usersData, error: usersError } = await supabase
-                    .from('users')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-                
-                if (usersError) throw usersError;
-                users = usersData || [];
-                
-                // Загружаем посты
-                const { data: postsData, error: postsError } = await supabase
-                    .from('posts')
-                    .select('*, user:users(*)')
-                    .order('created_at', { ascending: false });
-                
-                if (postsError) throw postsError;
-                posts = postsData || [];
-                
-                // Загружаем уведомления
-                await loadNotifications();
-                
-                // Загружаем сообщения
-                await loadConversations();
-                
-                // Обновляем кланы
-                updateClans();
-                
-                // Обновляем UI
-                updateUI();
-                updateOnlineStatus();
-                
-            } catch (error) {
-                console.error('Ошибка загрузки данных:', error);
-                showNotification('Ошибка', 'Не удалось загрузить данные', 'error');
-            }
-        }
+		  try {
+			// Проверяем сохраненного пользователя в localStorage
+			const savedUser = localStorage.getItem('mirror_user');
+			if (savedUser) {
+			  currentUser = JSON.parse(savedUser);
+			  await loadInitialData();
+			  showMainApp();
+			  return;
+			}
+			showAuthPage();
+		  } catch (error) {
+			console.error('Ошибка инициализации:', error);
+			showNotification('Ошибка', 'Не удалось загрузить данные', 'error');
+			showAuthPage();
+		  }
+		}
+
+		async function loadInitialData() {
+		  try {
+			// Загружаем пользователей
+			const { data: usersData, error: usersError } = await supabase
+			  .from('users')
+			  .select('*')
+			  .order('created_at', { ascending: false });
+			
+			if (usersError) throw usersError;
+			users = usersData || [];
+
+			// Загружаем посты
+			const { data: postsData, error: postsError } = await supabase
+			  .from('posts')
+			  .select('*, user:users(*)')
+			  .order('created_at', { ascending: false });
+			
+			if (postsError) throw postsError;
+			posts = postsData || [];
+
+			// Загружаем уведомления и сообщения
+			await loadNotifications();
+			await loadConversations();
+
+			// Обновляем статистику кланов
+			updateClans();
+
+			// Обновляем интерфейс
+			updateUI();
+			updateOnlineStatus();
+		  } catch (error) {
+			console.error('Ошибка загрузки данных:', error);
+			showNotification('Ошибка', 'Не удалось загрузить данные', 'error');
+		  }
+		}
+
         
         // РЕГИСТРАЦИЯ (без supabase.auth)
 		async function registerUser(userData) {
@@ -1698,18 +1686,12 @@
 		  }
 		}
         
-        async function logoutUser() {
-            try {
-                await supabase.auth.signOut();
-                localStorage.removeItem('mirror_token');
-                localStorage.removeItem('mirror_user');
-                currentUser = null;
-                currentToken = null;
-                showAuthPage();
-            } catch (error) {
-                console.error('Ошибка выхода:', error);
-            }
-        }
+		function logoutUser() {
+		currentUser = null;
+		localStorage.removeItem('mirror_user');
+		showAuthPage();
+		showNotification('Информация', 'Вы вышли из аккаунта', 'info');
+		}
         
         // ========== ОБНОВЛЕНИЕ UI ==========
         function updateUI() {
@@ -2730,74 +2712,88 @@
             });
             
             // Регистрация
-            document.getElementById('registerForm').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                const username = document.getElementById('regUsername').value.trim();
-                const displayName = document.getElementById('regDisplayName').value.trim();
-                const description = document.getElementById('regDescription').value.trim();
-                const emoji = document.getElementById('regEmoji').value;
-                const password = document.getElementById('regPassword').value;
-                const confirmPassword = document.getElementById('regConfirmPassword').value;
-                
-                if (!username.startsWith('@')) {
-                    showNotification('Ошибка', 'Юзернейм должен начинаться с @', 'error');
-                    return;
-                }
-                
-                if (password.length < 6) {
-                    showNotification('Ошибка', 'Пароль должен содержать не менее 6 символов', 'error');
-                    return;
-                }
-                
-                if (password !== confirmPassword) {
-                    showNotification('Ошибка', 'Пароли не совпадают', 'error');
-                    return;
-                }
-                
-                const result = await registerUser({
-                    username: username.substring(1), // Убираем @
-                    displayName,
-                    description,
-                    emoji,
-                    password
-                });
-                
-                if (result.success) {
-                    showNotification('Успех', 'Регистрация прошла успешно!', 'success');
-                    setTimeout(() => {
-                        document.getElementById('loginUsername').value = username;
-                        document.getElementById('loginTab').click();
-                    }, 1000);
-                } else {
-                    showNotification('Ошибка', result.error || 'Ошибка регистрации', 'error');
-                }
-            });
-            
-            // Вход
-            document.getElementById('loginForm').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                const username = document.getElementById('loginUsername').value.trim();
-                const password = document.getElementById('loginPassword').value;
-                
-                const result = await loginUser(username.substring(1), password);
-                
-                if (result.success) {
-                    currentUser = result.user;
-                    currentToken = (await supabase.auth.getSession()).data.session.access_token;
-                    
-                    localStorage.setItem('mirror_token', currentToken);
-                    localStorage.setItem('mirror_user', JSON.stringify(currentUser));
-                    
-                    showNotification('Успех', `Добро пожаловать, ${username}!`, 'success');
-                    setTimeout(() => {
-                        showMainApp();
-                    }, 1000);
-                } else {
-                    showNotification('Ошибка', result.error || 'Ошибка входа', 'error');
-                }
-            });
+			document.getElementById('registerForm').addEventListener('submit', async (e) => {
+			  e.preventDefault();
+			  
+			  const username = document.getElementById('regUsername').value.trim();
+			  const displayName = document.getElementById('regDisplayName').value.trim();
+			  const description = document.getElementById('regDescription').value.trim();
+			  const emoji = document.getElementById('regEmoji').value;
+			  const password = document.getElementById('regPassword').value;
+			  const confirmPassword = document.getElementById('regConfirmPassword').value;
+
+			  // Валидация
+			  if (!username.startsWith('@')) {
+				showNotification('Ошибка', 'Юзернейм должен начинаться с @', 'error');
+				return;
+			  }
+			  
+			  if (username.length < 3) {
+				showNotification('Ошибка', 'Юзернейм должен содержать не менее 3 символов', 'error');
+				return;
+			  }
+			  
+			  if (password.length < 6) {
+				showNotification('Ошибка', 'Пароль должен содержать не менее 6 символов', 'error');
+				return;
+			  }
+			  
+			  if (password !== confirmPassword) {
+				showNotification('Ошибка', 'Пароли не совпадают', 'error');
+				return;
+			  }
+
+			  // Убираем @ из юзернейма для хранения в БД
+			  const cleanUsername = username.substring(1);
+
+			  const result = await registerUser({
+				username: cleanUsername,
+				displayName: displayName,
+				description: description,
+				emoji: emoji,
+				password: password
+			  });
+
+			  if (result.success) {
+				showNotification('Успех', 'Регистрация прошла успешно!', 'success');
+				setTimeout(() => {
+				  document.getElementById('loginUsername').value = username;
+				  document.getElementById('loginTab').click();
+				}, 1000);
+			  } else {
+				showNotification('Ошибка', result.error || 'Ошибка регистрации', 'error');
+			  }
+			});
+
+			// Вход
+			document.getElementById('loginForm').addEventListener('submit', async (e) => {
+			  e.preventDefault();
+			  
+			  const username = document.getElementById('loginUsername').value.trim();
+			  const password = document.getElementById('loginPassword').value;
+
+			  // Убираем @ из юзернейма для поиска в БД
+			  const cleanUsername = username.startsWith('@') ? username.substring(1) : username;
+
+			  const result = await loginUser(cleanUsername, password);
+
+			  if (result.success) {
+				currentUser = result.user;
+				localStorage.setItem('mirror_user', JSON.stringify(currentUser));
+				showNotification('Успех', `Добро пожаловать, ${username}!`, 'success');
+				
+				setTimeout(() => {
+				  showMainApp();
+				}, 1000);
+			  } else {
+				showNotification('Ошибка', result.error || 'Неверный юзернейм или пароль', 'error');
+			  }
+			});
+
+			// Выход
+			document.getElementById('logoutBtn').addEventListener('click', () => {
+			  logoutUser();
+			});
             
             // Навигация
             document.querySelectorAll('.nav-links a').forEach(link => {
