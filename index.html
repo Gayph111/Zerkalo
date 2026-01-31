@@ -1223,7 +1223,7 @@
         const SUPABASE_URL = 'https://kzbznupjamhualdewyxk.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_VSXNcvoaf2meTwwR8gr80g_Y_YEhSgd';
         
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         
         // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
         let currentUser = null;
