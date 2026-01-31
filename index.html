@@ -1721,7 +1721,7 @@
             document.getElementById('statFollowing').textContent = currentUser.following_count || 0;
             
             // Админка
-            if (currentUser.username === '@onegin') {
+            if (currentUser.username === 'onegin') {
                 document.getElementById('adminLink').classList.remove('hidden');
             }
             
@@ -2540,7 +2540,7 @@
         
         // ========== АДМИН ПАНЕЛЬ ==========
         async function loadAdminPanel() {
-            if (currentUser.username !== '@onegin') {
+            if (currentUser.username !== 'onegin') {
                 showNotification('Ошибка', 'У вас нет доступа к админ панели', 'error');
                 showPage('feed');
                 return;
