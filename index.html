@@ -1516,28 +1516,72 @@
         supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         
         // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
-		let currentUser = null;
-		let users = [];
-		let posts = [];
-		let notifications = [];
-		let conversations = [];
-		let clans = {};
-		let onlineUsers = new Set();
-
-		// ========== SUPABASE ФУНКЦИИ ==========
-
-		async function initializeSupabase() {
+        let currentUser = null;
+        let currentToken = null;
+        let users = [];
+        let posts = [];
+        let clans = {};
+        let notifications = [];
+        let messages = [];
+        let conversations = [];
+        let onlineUsers = new Set();
+        let activeConversation = null;
+        let lastActivity = Date.now();
+        
+        const availableEmojis = [
+            '😀', '😎', '🤖', '👻', '🐱', '🦊', '🐶', '🦁', '🚀', '🎨',
+            '🎮', '🎵', '📸', '📚', '🍳', '🌍', '👨‍💻', '👩‍💻', '🧠', '💡',
+            '🔥', '🌟', '🌙', '☀️', '🌈', '🍕', '⚽', '🎭', '🎸', '🎬'
+        ];
+        
+        // ========== СИСТЕМНЫЕ УВЕДОМЛЕНИЯ ==========
+        function showNotification(title, message, type = 'info', duration = 5000) {
+            const container = document.getElementById('notificationContainer');
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            
+            const icon = type === 'success' ? 'check-circle' : 
+                        type === 'error' ? 'exclamation-circle' : 
+                        type === 'warning' ? 'exclamation-triangle' : 'info-circle';
+            
+            notification.innerHTML = `
+                <div class="notification-icon">
+                    <i class="fas fa-${icon}"></i>
+                </div>
+                <div class="notification-content">
+                    <div class="notification-title">${title}</div>
+                    <div class="notification-message">${message}</div>
+                </div>
+                <button class="notification-close">&times;</button>
+            `;
+            
+            container.appendChild(notification);
+            
+            const closeBtn = notification.querySelector('.notification-close');
+            closeBtn.addEventListener('click', () => {
+                notification.classList.add('hiding');
+                setTimeout(() => notification.remove(), 300);
+            });
+            
+            if (duration > 0) {
+                setTimeout(() => {
+                    notification.classList.add('hiding');
+                    setTimeout(() => notification.remove(), 300);
+                }, duration);
+            }
+        }
+        
+        // ========== SUPABASE ФУНКЦИИ ==========
+        async function initializeSupabase() {
 		  try {
 			// Проверяем сохраненного пользователя в localStorage
 			const savedUser = localStorage.getItem('mirror_user');
 			if (savedUser) {
 			  currentUser = JSON.parse(savedUser);
-			  console.log('Загружен пользователь из localStorage:', currentUser);
 			  await loadInitialData();
 			  showMainApp();
 			  return;
 			}
-			console.log('Пользователь не найден, показываем форму входа');
 			showAuthPage();
 		  } catch (error) {
 			console.error('Ошибка инициализации:', error);
@@ -1554,28 +1598,21 @@
 			  .select('*')
 			  .order('created_at', { ascending: false });
 			
-			if (usersError) {
-			  console.error('Ошибка загрузки пользователей:', usersError);
-			  throw usersError;
-			}
+			if (usersError) throw usersError;
 			users = usersData || [];
-			console.log('Загружено пользователей:', users.length);
 
 			// Загружаем посты
 			const { data: postsData, error: postsError } = await supabase
 			  .from('posts')
-			  .select('*')
+			  .select('*, user:users(*)')
 			  .order('created_at', { ascending: false });
 			
-			if (postsError) {
-			  console.error('Ошибка загрузки постов:', postsError);
-			  throw postsError;
-			}
+			if (postsError) throw postsError;
 			posts = postsData || [];
-			console.log('Загружено постов:', posts.length);
 
-			// Загружаем уведомления
+			// Загружаем уведомления и сообщения
 			await loadNotifications();
+			await loadConversations();
 
 			// Обновляем статистику кланов
 			updateClans();
@@ -1589,30 +1626,31 @@
 		  }
 		}
 
-		// РЕГИСТРАЦИЯ - напрямую в таблицу users
+        
+        // РЕГИСТРАЦИЯ (без supabase.auth)
 		async function registerUser(userData) {
 		  try {
 			// Проверяем уникальность юзернейма
-			const { data: existingUser, error: checkError } = await supabase
+			const { data: existing } = await supabase
 			  .from('users')
 			  .select('id')
 			  .eq('username', userData.username)
 			  .single();
-
-			if (existingUser) {
+			
+			if (existing) {
 			  return { success: false, error: 'Юзернейм уже занят' };
 			}
-
-			// Создаем пользователя напрямую в таблице
-			const { data: newUser, error: insertError } = await supabase
+			
+			// Создаём пользователя напрямую в таблице
+			const { data, error } = await supabase
 			  .from('users')
 			  .insert([{
 				username: userData.username,
 				display_name: userData.displayName,
 				emoji: userData.emoji,
-				password_hash: userData.password,
 				clan: userData.emoji,
 				description: userData.description || '',
+				password_hash: userData.password, // ⚠️ Для демо без хеширования (в продакшене — хешируй!)
 				is_verified: false,
 				followers_count: 0,
 				following_count: 0,
@@ -1620,697 +1658,1300 @@
 			  }])
 			  .select()
 			  .single();
-
-			if (insertError) {
-			  console.error('Ошибка вставки пользователя:', insertError);
-			  throw insertError;
-			}
-
-			return { success: true, user: newUser };
+			
+			if (error) throw error;
+			return { success: true, user: data };
 		  } catch (error) {
-			console.error('Ошибка регистрации:', error);
-			return { success: false, error: error.message || 'Ошибка регистрации' };
+			return { success: false, error: 'Ошибка регистрации' };
 		  }
 		}
 
-		// ВХОД - поиск по username и password_hash
+		// ВХОД (без supabase.auth)
 		async function loginUser(username, password) {
 		  try {
-			// Ищем пользователя по юзернейму и паролю
 			const { data: user, error } = await supabase
 			  .from('users')
 			  .select('*')
 			  .eq('username', username)
-			  .eq('password_hash', password)
+			  .eq('password_hash', password) // ⚠️ Для демо без хеширования
 			  .single();
-
+			
 			if (error || !user) {
 			  return { success: false, error: 'Неверный юзернейм или пароль' };
 			}
-
-			return { success: true, user: user };
+			
+			return { success: true, user };
 		  } catch (error) {
-			console.error('Ошибка входа:', error);
-			return { success: false, error: error.message || 'Ошибка входа' };
+			return { success: false, error: 'Ошибка входа' };
 		  }
 		}
-
-		// ВЫХОД
+        
 		function logoutUser() {
-		  currentUser = null;
-		  localStorage.removeItem('mirror_user');
-		  showAuthPage();
-		  showNotification('Информация', 'Вы вышли из аккаунта', 'info');
+		currentUser = null;
+		localStorage.removeItem('mirror_user');
+		showAuthPage();
+		showNotification('Информация', 'Вы вышли из аккаунта', 'info');
 		}
+        
+        // ========== ОБНОВЛЕНИЕ UI ==========
+        function updateUI() {
+            if (!currentUser) return;
+            
+            // Обновляем информацию о пользователе
+            document.getElementById('userEmoji').textContent = currentUser.emoji;
+            document.getElementById('userUsername').textContent = `@${currentUser.username}`;
+            document.getElementById('userClan').textContent = currentUser.clan;
+            
+            document.getElementById('profileEmoji').textContent = currentUser.emoji;
+            document.getElementById('profileName').textContent = currentUser.display_name;
+            document.getElementById('profileUsername').textContent = `@${currentUser.username}`;
+            document.getElementById('profileClan').textContent = currentUser.clan;
+            document.getElementById('userDescription').textContent = currentUser.description || 'Пользователь пока ничего не написал в описании';
+            document.getElementById('currentUserEmoji').textContent = currentUser.emoji;
+            
+            // Галочка верификации
+            const verifiedBadges = document.querySelectorAll('.verified-badge');
+            verifiedBadges.forEach(badge => {
+                badge.style.display = currentUser.is_verified ? 'inline' : 'none';
+            });
+            
+            // Статистика
+            document.getElementById('statPosts').textContent = currentUser.posts_count || 0;
+            document.getElementById('statFollowers').textContent = currentUser.followers_count || 0;
+            document.getElementById('statFollowing').textContent = currentUser.following_count || 0;
+            
+            // Админка
+            if (currentUser.username === 'onegin') {
+                document.getElementById('adminLink').classList.remove('hidden');
+            }
+            
+            // Загружаем данные
+            loadPosts();
+            loadTopClans();
+            loadRecommendations();
+            loadAllProfiles();
+            loadAllClans();
+            loadOnlineUsers();
+        }
+        
+        function updateClans() {
+            clans = {};
+            users.forEach(user => {
+                if (!clans[user.clan]) {
+                    clans[user.clan] = { emoji: user.clan, members: 0, posts: 0 };
+                }
+                clans[user.clan].members++;
+            });
+            
+            posts.forEach(post => {
+                const user = users.find(u => u.id === post.user_id);
+                if (user && clans[user.clan]) {
+                    clans[user.clan].posts++;
+                }
+            });
+        }
+        
+        function updateOnlineStatus() {
+            // Обновляем статус текущего пользователя
+            const userStatus = document.getElementById('userStatusIndicator');
+            const profileStatus = document.getElementById('profileStatusIndicator');
+            if (userStatus && profileStatus) {
+                userStatus.className = 'status-indicator status-online';
+                profileStatus.className = 'status-indicator status-online';
+            }
+            
+            // Считаем онлайн пользователей
+            onlineUsers.add(currentUser.id);
+            document.getElementById('onlineCount').textContent = `${onlineUsers.size} онлайн`;
+        }
+        
+        // ========== ПОСТЫ ==========
+        async function loadPosts() {
+            const postsContainer = document.getElementById('postsContainer');
+            const emptyFeed = document.getElementById('emptyFeed');
+            
+            postsContainer.innerHTML = '';
+            
+            if (posts.length === 0) {
+                emptyFeed.classList.remove('hidden');
+                return;
+            }
+            
+            emptyFeed.classList.add('hidden');
+            
+            posts.forEach(post => {
+                const user = post.user || users.find(u => u.id === post.user_id);
+                if (!user) return;
+                
+                const postElement = createPostElement(post, user);
+                postsContainer.appendChild(postElement);
+            });
+        }
+        
+        function createPostElement(post, user) {
+            const postElement = document.createElement('div');
+            postElement.className = 'post panel-card slide-up';
+            postElement.dataset.postId = post.id;
+            
+            const timeDiff = Date.now() - new Date(post.created_at).getTime();
+            const hours = Math.floor(timeDiff / (1000 * 60 * 60));
+            const timeText = hours < 1 ? 'только что' : 
+                            hours < 24 ? `${hours} ч назад` : 
+                            `${Math.floor(hours / 24)} д назад`;
+            
+            const isRepost = post.original_post_id;
+            const originalPost = isRepost ? posts.find(p => p.id === post.original_post_id) : null;
+            const originalUser = originalPost ? (originalPost.user || users.find(u => u.id === originalPost.user_id)) : null;
+            
+            let postContent = '';
+            
+            if (isRepost && originalPost && originalUser) {
+                postContent = `
+                    <div class="repost-header">
+                        <i class="fas fa-retweet"></i>
+                        <span>${user.display_name} репостнул(а)</span>
+                    </div>
+                    <div class="repost-content">
+                        <div class="post-header" data-user-id="${originalUser.id}">
+                            <div class="emoji-avatar">${originalUser.emoji}</div>
+                            <div class="post-user-info">
+                                <div class="post-username">
+                                    @${originalUser.username}
+                                    ${originalUser.is_verified ? '<i class="fas fa-check-circle verified-badge"></i>' : ''}
+                                </div>
+                                <div class="post-time">${timeText}</div>
+                            </div>
+                        </div>
+                        <div class="post-content">${originalPost.content}</div>
+                    </div>
+                `;
+            } else {
+                postContent = `
+                    <div class="post-header" data-user-id="${user.id}">
+                        <div class="emoji-avatar">${user.emoji}
+                            <div class="status-indicator ${onlineUsers.has(user.id) ? 'status-online' : ''}"></div>
+                        </div>
+                        <div class="post-user-info">
+                            <div class="post-username">
+                                @${user.username}
+                                ${user.is_verified ? '<i class="fas fa-check-circle verified-badge"></i>' : ''}
+                            </div>
+                            <div class="post-time">${timeText}</div>
+                        </div>
+                    </div>
+                    <div class="post-content">${post.content}</div>
+                `;
+            }
+            
+            postElement.innerHTML = postContent + `
+                <div class="post-stats">
+                    <div class="post-stat" data-action="like">
+                        <i class="far fa-heart"></i>
+                        <span>${post.likes_count || 0}</span>
+                    </div>
+                    <div class="post-stat" data-action="comment">
+                        <i class="far fa-comment"></i>
+                        <span>${post.comments_count || 0}</span>
+                    </div>
+                    <div class="post-stat" data-action="repost">
+                        <i class="fas fa-retweet"></i>
+                        <span>${post.reposts_count || 0}</span>
+                    </div>
+                </div>
+            `;
+            
+            return postElement;
+        }
+        
+        async function createPost(content, originalPostId = null) {
+            try {
+                const { data, error } = await supabase
+                    .from('posts')
+                    .insert([{
+                        user_id: currentUser.id,
+                        content: content,
+                        original_post_id: originalPostId,
+                        likes_count: 0,
+                        comments_count: 0,
+                        reposts_count: 0
+                    }])
+                    .select('*, user:users(*)')
+                    .single();
+                
+                if (error) throw error;
+                
+                posts.unshift(data);
+                loadPosts();
+                showNotification('Успех', 'Пост опубликован', 'success');
+                
+            } catch (error) {
+                console.error('Ошибка создания поста:', error);
+                showNotification('Ошибка', 'Не удалось создать пост', 'error');
+            }
+        }
+        
+        // ========== КЛАНЫ ==========
+        function loadTopClans() {
+            const topClansList = document.getElementById('topClansList');
+            topClansList.innerHTML = '';
+            
+            const clansArray = Object.values(clans);
+            clansArray.sort((a, b) => (b.members + b.posts) - (a.members + a.posts));
+            
+            const topClans = clansArray.slice(0, 5);
+            
+            topClans.forEach((clan, index) => {
+                const clanItem = document.createElement('div');
+                clanItem.className = 'clan-item';
+                clanItem.innerHTML = `
+                    <div class="clan-rank">${index + 1}</div>
+                    <div class="clan-emoji">${clan.emoji}</div>
+                    <div class="clan-info">
+                        <div class="clan-name">Клан ${clan.emoji}</div>
+                        <div class="clan-members">${clan.members} участников</div>
+                    </div>
+                `;
+                topClansList.appendChild(clanItem);
+            });
+        }
+        
+        function loadAllClans() {
+            const allClansList = document.getElementById('allClansList');
+            allClansList.innerHTML = '';
+            
+            const clansArray = Object.values(clans);
+            clansArray.sort((a, b) => b.members - a.members);
+            
+            clansArray.forEach(clan => {
+                const clanItem = document.createElement('div');
+                clanItem.className = 'clan-item';
+                clanItem.innerHTML = `
+                    <div class="clan-emoji">${clan.emoji}</div>
+                    <div class="clan-info">
+                        <div class="clan-name">Клан ${clan.emoji}</div>
+                        <div class="clan-members">${clan.members} участников</div>
+                    </div>
+                `;
+                allClansList.appendChild(clanItem);
+            });
+        }
+        
+        // ========== РЕКОМЕНДАЦИИ ==========
+        function loadRecommendations() {
+            const recommendationsList = document.getElementById('recommendationsList');
+            recommendationsList.innerHTML = '';
+            
+            // Рекомендуем пользователей не из клана текущего пользователя
+            const recommendedUsers = users
+                .filter(user => 
+                    user.id !== currentUser.id && 
+                    user.clan !== currentUser.clan
+                )
+                .slice(0, 3);
+            
+            recommendedUsers.forEach(user => {
+                const userElement = document.createElement('div');
+                userElement.style.display = 'flex';
+                userElement.style.alignItems = 'center';
+                userElement.style.gap = '10px';
+                userElement.dataset.userId = user.id;
+                
+                userElement.innerHTML = `
+                    <div class="emoji-avatar" style="font-size: 1.5rem; width: 40px; height: 40px;">
+                        ${user.emoji}
+                        <div class="status-indicator ${onlineUsers.has(user.id) ? 'status-online' : ''}"></div>
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600;">@${user.username}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-light);">Клан: ${user.clan}</div>
+                    </div>
+                    <button class="btn btn-primary" style="padding: 5px 15px; font-size: 0.9rem;" data-action="view-profile">
+                        Профиль
+                    </button>
+                `;
+                
+                recommendationsList.appendChild(userElement);
+                
+                userElement.querySelector('[data-action="view-profile"]').addEventListener('click', () => {
+                    viewUserProfile(user.id);
+                });
+            });
+        }
+        
+        function loadOnlineUsers() {
+            const onlineUsersList = document.getElementById('onlineUsersList');
+            onlineUsersList.innerHTML = '';
+            
+            const onlineUsersArray = users
+                .filter(user => onlineUsers.has(user.id) && user.id !== currentUser.id)
+                .slice(0, 5);
+            
+            if (onlineUsersArray.length === 0) {
+                onlineUsersList.innerHTML = '<div style="color: var(--text-light); text-align: center;">Нет пользователей онлайн</div>';
+                return;
+            }
+            
+            onlineUsersArray.forEach(user => {
+                const userElement = document.createElement('div');
+                userElement.style.display = 'flex';
+                userElement.style.alignItems = 'center';
+                userElement.style.gap = '10px';
+                userElement.style.padding = '8px';
+                userElement.style.borderRadius = '8px';
+                userElement.style.transition = 'background-color 0.2s';
+                userElement.dataset.userId = user.id;
+                
+                userElement.innerHTML = `
+                    <div class="emoji-avatar" style="font-size: 1.5rem; width: 35px; height: 35px;">
+                        ${user.emoji}
+                        <div class="status-indicator status-online"></div>
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; font-size: 0.9rem;">@${user.username}</div>
+                    </div>
+                    <button class="btn-icon" title="Написать сообщение" data-action="message">
+                        <i class="fas fa-envelope"></i>
+                    </button>
+                `;
+                
+                onlineUsersList.appendChild(userElement);
+                
+                userElement.addEventListener('mouseenter', () => {
+                    userElement.style.backgroundColor = 'var(--secondary)';
+                });
+                
+                userElement.addEventListener('mouseleave', () => {
+                    userElement.style.backgroundColor = 'transparent';
+                });
+                
+                userElement.querySelector('[data-action="message"]').addEventListener('click', () => {
+                    startConversation(user.id);
+                    showPage('messages');
+                });
+                
+                userElement.addEventListener('click', (e) => {
+                    if (!e.target.closest('[data-action="message"]')) {
+                        viewUserProfile(user.id);
+                    }
+                });
+            });
+        }
+        
+        // ========== ПРОФИЛИ ПОЛЬЗОВАТЕЛЕЙ ==========
+        function loadAllProfiles() {
+            const profilesGrid = document.getElementById('profilesGrid');
+            profilesGrid.innerHTML = '';
+            
+            const otherUsers = users.filter(user => user.id !== currentUser.id);
+            
+            otherUsers.forEach(user => {
+                const profileCard = createProfileCard(user);
+                profilesGrid.appendChild(profileCard);
+            });
+        }
+        
+        function createProfileCard(user) {
+            const profileCard = document.createElement('div');
+            profileCard.className = 'profile-card slide-up';
+            profileCard.dataset.userId = user.id;
+            
+            profileCard.innerHTML = `
+                <div class="profile-emoji">${user.emoji}
+                    <div class="status-indicator ${onlineUsers.has(user.id) ? 'status-online' : ''}"></div>
+                </div>
+                <div class="profile-username">
+                    @${user.username}
+                    ${user.is_verified ? '<i class="fas fa-check-circle verified-badge"></i>' : ''}
+                </div>
+                <div class="profile-name">${user.display_name}</div>
+                <div class="clan">${user.clan}</div>
+                <div style="margin-top: 10px; color: var(--text-light); font-size: 0.9rem; height: 40px; overflow: hidden;">
+                    ${user.description ? user.description.substring(0, 60) + '...' : 'Нет описания'}
+                </div>
+                <div class="profile-stats">
+                    <div class="stat">
+                        <div class="stat-value">${user.posts_count || 0}</div>
+                        <div class="stat-label">Постов</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">${user.followers_count || 0}</div>
+                        <div class="stat-label">Подписчиков</div>
+                    </div>
+                </div>
+                <div style="margin-top: 15px; display: flex; gap: 10px;">
+                    <button class="btn btn-primary" style="flex: 1;" data-action="view-profile">
+                        Профиль
+                    </button>
+                    <button class="btn btn-secondary" data-action="message">
+                        <i class="fas fa-envelope"></i>
+                    </button>
+                </div>
+            `;
+            
+            profileCard.querySelector('[data-action="view-profile"]').addEventListener('click', (e) => {
+                e.stopPropagation();
+                viewUserProfile(user.id);
+            });
+            
+            profileCard.querySelector('[data-action="message"]').addEventListener('click', (e) => {
+                e.stopPropagation();
+                startConversation(user.id);
+                showPage('messages');
+            });
+            
+            profileCard.addEventListener('click', (e) => {
+                if (!e.target.closest('button')) {
+                    viewUserProfile(user.id);
+                }
+            });
+            
+            return profileCard;
+        }
+        
+        function viewUserProfile(userId) {
+            const user = users.find(u => u.id === userId);
+            if (!user) return;
+            
+            const userPosts = posts.filter(p => p.user_id === userId && !p.original_post_id);
+            const userReposts = posts.filter(p => p.user_id === userId && p.original_post_id);
+            
+            const modal = document.getElementById('viewProfileModal');
+            const content = document.getElementById('viewProfileContent');
+            
+            content.innerHTML = `
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <div style="position: relative; display: inline-block; margin-bottom: 15px;">
+                        <div class="profile-emoji" style="font-size: 5rem;">${user.emoji}</div>
+                        <div class="status-indicator ${onlineUsers.has(user.id) ? 'status-online' : ''}" 
+                             style="position: absolute; bottom: 5px; right: 5px; width: 16px; height: 16px;"></div>
+                        ${user.is_verified ? 
+                            '<i class="fas fa-check-circle verified-badge" style="position: absolute; bottom: 0; right: -5px; font-size: 1.2rem;"></i>' : ''}
+                    </div>
+                    <h2 style="font-size: 1.8rem; margin-bottom: 5px;">${user.display_name}</h2>
+                    <div class="username" style="font-size: 1.1rem; color: var(--text-light); margin-bottom: 8px;">
+                        @${user.username}
+                        ${user.is_verified ? '<i class="fas fa-check-circle verified-badge"></i>' : ''}
+                    </div>
+                    <div class="clan" style="display: inline-block; margin-bottom: 15px;">${user.clan}</div>
+                    
+                    ${user.description ? 
+                        `<div class="user-description" style="margin-top: 15px; text-align: left;">${user.description}</div>` : ''}
+                    
+                    <div style="color: var(--text-light); margin-top: 10px;">
+                        <i class="fas fa-circle ${onlineUsers.has(user.id) ? 'status-online' : ''}" 
+                           style="color: ${onlineUsers.has(user.id) ? 'var(--online)' : 'var(--offline)'}; margin-right: 5px;"></i>
+                        ${onlineUsers.has(user.id) ? 'В сети' : 'Не в сети'}
+                    </div>
+                </div>
+                
+                <div class="profile-tabs">
+                    <div class="profile-tab active" data-tab="posts">Публикации (${userPosts.length})</div>
+                    <div class="profile-tab" data-tab="reposts">Репосты (${userReposts.length})</div>
+                </div>
+                
+                <div class="profile-tab-content active" id="profilePostsTab" style="max-height: 400px; overflow-y: auto;">
+                    ${userPosts.length > 0 ? 
+                        userPosts.map(post => createPostElement(post, user).outerHTML).join('') : 
+                        '<div style="text-align: center; padding: 40px; color: var(--text-light);">Пока нет публикаций</div>'}
+                </div>
+                
+                <div class="profile-tab-content" id="profileRepostsTab" style="max-height: 400px; overflow-y: auto;">
+                    ${userReposts.length > 0 ? 
+                        userReposts.map(post => createPostElement(post, user).outerHTML).join('') : 
+                        '<div style="text-align: center; padding: 40px; color: var(--text-light);">Пока нет репостов</div>'}
+                </div>
+            `;
+            
+            modal.classList.add('active');
+            
+            // Обработчики вкладок
+            document.querySelectorAll('#viewProfileContent .profile-tab').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    document.querySelectorAll('#viewProfileContent .profile-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('#viewProfileContent .profile-tab-content').forEach(c => c.classList.remove('active'));
+                    
+                    this.classList.add('active');
+                    document.getElementById(`profile${this.dataset.tab.charAt(0).toUpperCase() + this.dataset.tab.slice(1)}Tab`).classList.add('active');
+                });
+            });
+            
+            // Обработчик закрытия
+            document.getElementById('closeViewProfileModal').onclick = () => {
+                modal.classList.remove('active');
+            };
+        }
+        
+        // ========== СООБЩЕНИЯ ==========
+        async function loadConversations() {
+            try {
+                const { data, error } = await supabase
+                    .from('conversations')
+                    .select('*, participants:conversation_participants(user:users(*))')
+                    .order('updated_at', { ascending: false });
+                
+                if (error) throw error;
+                
+                conversations = data || [];
+                updateConversationsList();
+                
+            } catch (error) {
+                console.error('Ошибка загрузки диалогов:', error);
+            }
+        }
+        
+        function updateConversationsList() {
+            const conversationsList = document.getElementById('conversationsList');
+            conversationsList.innerHTML = '';
+            
+            if (conversations.length === 0) {
+                conversationsList.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: var(--text-light);">
+                        <i class="fas fa-comments" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                        <p>Нет диалогов</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            conversations.forEach(conversation => {
+                // Находим собеседника (не текущего пользователя)
+                const otherParticipant = conversation.participants?.find(
+                    p => p.user.id !== currentUser.id
+                )?.user;
+                
+                if (!otherParticipant) return;
+                
+                const conversationItem = document.createElement('div');
+                conversationItem.className = 'conversation-item';
+                conversationItem.dataset.conversationId = conversation.id;
+                conversationItem.dataset.userId = otherParticipant.id;
+                
+                conversationItem.innerHTML = `
+                    <div class="emoji-avatar">${otherParticipant.emoji}
+                        <div class="status-indicator ${onlineUsers.has(otherParticipant.id) ? 'status-online' : ''}"></div>
+                    </div>
+                    <div class="conversation-info">
+                        <div class="conversation-name">
+                            @${otherParticipant.username}
+                            ${otherParticipant.is_verified ? '<i class="fas fa-check-circle verified-badge"></i>' : ''}
+                        </div>
+                        <div class="conversation-last-message">
+                            ${conversation.last_message || 'Нет сообщений'}
+                        </div>
+                    </div>
+                `;
+                
+                conversationItem.addEventListener('click', () => {
+                    openConversation(conversation.id, otherParticipant);
+                });
+                
+                conversationsList.appendChild(conversationItem);
+            });
+        }
+        
+        async function startConversation(userId) {
+            const user = users.find(u => u.id === userId);
+            if (!user) return;
+            
+            // Проверяем, существует ли уже диалог
+            let conversation = conversations.find(c => 
+                c.participants?.some(p => p.user.id === userId)
+            );
+            
+            if (!conversation) {
+                // Создаем новый диалог
+                try {
+                    const { data, error } = await supabase
+                        .from('conversations')
+                        .insert([{
+                            last_message: 'Диалог начат',
+                            updated_at: new Date().toISOString()
+                        }])
+                        .select()
+                        .single();
+                    
+                    if (error) throw error;
+                    
+                    conversation = data;
+                    
+                    // Добавляем участников
+                    await supabase.from('conversation_participants').insert([
+                        { conversation_id: conversation.id, user_id: currentUser.id },
+                        { conversation_id: conversation.id, user_id: userId }
+                    ]);
+                    
+                    await loadConversations();
+                    
+                } catch (error) {
+                    console.error('Ошибка создания диалога:', error);
+                    showNotification('Ошибка', 'Не удалось создать диалог', 'error');
+                    return;
+                }
+            }
+            
+            openConversation(conversation.id, user);
+        }
+        
+        function openConversation(conversationId, user) {
+            activeConversation = { id: conversationId, user: user };
+            
+            // Обновляем заголовок
+            document.getElementById('chatUserEmoji').textContent = user.emoji;
+            document.getElementById('chatUserName').innerHTML = `
+                @${user.username}
+                ${user.is_verified ? '<i class="fas fa-check-circle verified-badge"></i>' : ''}
+            `;
+            document.getElementById('chatUserStatus').textContent = 
+                onlineUsers.has(user.id) ? 'В сети' : 'Не в сети';
+            
+            // Показываем элементы
+            document.getElementById('messagesHeader').classList.remove('hidden');
+            document.getElementById('messageInputArea').classList.remove('hidden');
+            
+            // Загружаем сообщения
+            loadMessages(conversationId);
+            
+            // Помечаем диалог как активный
+            document.querySelectorAll('.conversation-item').forEach(item => {
+                item.classList.remove('active');
+                if (item.dataset.conversationId === conversationId) {
+                    item.classList.add('active');
+                }
+            });
+        }
+        
+        async function loadMessages(conversationId) {
+            const messagesBody = document.getElementById('messagesBody');
+            messagesBody.innerHTML = '<div class="loading">Загрузка сообщений...</div>';
+            
+            try {
+                const { data, error } = await supabase
+                    .from('messages')
+                    .select('*, sender:users(*)')
+                    .eq('conversation_id', conversationId)
+                    .order('created_at', { ascending: true });
+                
+                if (error) throw error;
+                
+                messagesBody.innerHTML = '';
+                
+                if (data.length === 0) {
+                    messagesBody.innerHTML = `
+                        <div style="text-align: center; padding: 40px; color: var(--text-light);">
+                            <p>Начните общение с этим пользователем</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                data.forEach(message => {
+                    const messageElement = document.createElement('div');
+                    messageElement.className = `message ${message.sender_id === currentUser.id ? 'outgoing' : 'incoming'}`;
+                    
+                    const time = new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    
+                    messageElement.innerHTML = `
+                        <div class="message-content">${message.content}</div>
+                        <div class="message-time">${time}</div>
+                    `;
+                    
+                    messagesBody.appendChild(messageElement);
+                });
+                
+                // Прокручиваем вниз
+                messagesBody.scrollTop = messagesBody.scrollHeight;
+                
+            } catch (error) {
+                console.error('Ошибка загрузки сообщений:', error);
+                messagesBody.innerHTML = '<div class="error">Ошибка загрузки сообщений</div>';
+            }
+        }
+        
+        async function sendMessage(content) {
+            if (!activeConversation || !content.trim()) return;
+            
+            try {
+                const { data, error } = await supabase
+                    .from('messages')
+                    .insert([{
+                        conversation_id: activeConversation.id,
+                        sender_id: currentUser.id,
+                        content: content.trim()
+                    }])
+                    .select('*, sender:users(*)')
+                    .single();
+                
+                if (error) throw error;
+                
+                // Обновляем диалог
+                await supabase
+                    .from('conversations')
+                    .update({ 
+                        last_message: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', activeConversation.id);
+                
+                // Перезагружаем сообщения
+                await loadMessages(activeConversation.id);
+                await loadConversations();
+                
+                // Очищаем поле ввода
+                document.getElementById('messageInput').value = '';
+                
+            } catch (error) {
+                console.error('Ошибка отправки сообщения:', error);
+                showNotification('Ошибка', 'Не удалось отправить сообщение', 'error');
+            }
+        }
+        
+        // ========== УВЕДОМЛЕНИЯ ==========
+        async function loadNotifications() {
+            try {
+                const { data, error } = await supabase
+                    .from('notifications')
+                    .select('*, from_user:users(*), post:posts(*)')
+                    .eq('user_id', currentUser.id)
+                    .order('created_at', { ascending: false })
+                    .limit(50);
+                
+                if (error) throw error;
+                
+                notifications = data || [];
+                updateNotificationsBadge();
+                
+                if (document.getElementById('notificationsPage').classList.contains('hidden') === false) {
+                    displayNotifications();
+                }
+                
+            } catch (error) {
+                console.error('Ошибка загрузки уведомлений:', error);
+            }
+        }
+        
+        function updateNotificationsBadge() {
+            const unreadCount = notifications.filter(n => !n.is_read).length;
+            const badge = document.getElementById('notificationBadge');
+            
+            if (unreadCount > 0) {
+                badge.textContent = unreadCount;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+        
+        function displayNotifications() {
+            const notificationsList = document.getElementById('notificationsList');
+            notificationsList.innerHTML = '';
+            
+            if (notifications.length === 0) {
+                notificationsList.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: var(--text-light);">
+                        <i class="fas fa-bell-slash" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                        <p>Нет уведомлений</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            notifications.forEach(notification => {
+                const notificationElement = document.createElement('div');
+                notificationElement.className = 'panel-card slide-up';
+                notificationElement.style.marginBottom = '10px';
+                notificationElement.style.opacity = notification.is_read ? '0.7' : '1';
+                notificationElement.style.cursor = 'pointer';
+                
+                let message = '';
+                let icon = 'bell';
+                
+                switch (notification.type) {
+                    case 'like':
+                        message = `@${notification.from_user.username} понравился ваш пост`;
+                        icon = 'heart';
+                        break;
+                    case 'comment':
+                        message = `@${notification.from_user.username} прокомментировал(а) ваш пост`;
+                        icon = 'comment';
+                        break;
+                    case 'repost':
+                        message = `@${notification.from_user.username} репостнул(а) ваш пост`;
+                        icon = 'retweet';
+                        break;
+                    case 'follow':
+                        message = `@${notification.from_user.username} подписался(ась) на вас`;
+                        icon = 'user-plus';
+                        break;
+                    case 'message':
+                        message = `@${notification.from_user.username} отправил(а) вам сообщение`;
+                        icon = 'envelope';
+                        break;
+                    default:
+                        message = `@${notification.from_user.username} взаимодействовал(а) с вами`;
+                }
+                
+                const time = new Date(notification.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                
+                notificationElement.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div class="emoji-avatar" style="font-size: 1.5rem; width: 40px; height: 40px;">
+                            ${notification.from_user.emoji}
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600;">${notification.from_user.display_name}</div>
+                            <div>${message}</div>
+                            <div style="font-size: 0.9rem; color: var(--text-light); margin-top: 5px;">
+                                ${time}
+                            </div>
+                        </div>
+                        <div>
+                            <i class="fas fa-${icon}" style="color: var(--primary);"></i>
+                        </div>
+                    </div>
+                `;
+                
+                notificationElement.addEventListener('click', async () => {
+                    // Помечаем как прочитанное
+                    if (!notification.is_read) {
+                        try {
+                            await supabase
+                                .from('notifications')
+                                .update({ is_read: true })
+                                .eq('id', notification.id);
+                            
+                            notification.is_read = true;
+                            notificationElement.style.opacity = '0.7';
+                            updateNotificationsBadge();
+                        } catch (error) {
+                            console.error('Ошибка обновления уведомления:', error);
+                        }
+                    }
+                    
+                    // Если уведомление связано с постом
+                    if (notification.post_id) {
+                        showPage('feed');
+                        // Здесь можно добавить прокрутку к посту
+                    }
+                });
+                
+                notificationsList.appendChild(notificationElement);
+            });
+        }
+        
+        // ========== АДМИН ПАНЕЛЬ ==========
+        async function loadAdminPanel() {
+            if (currentUser.username !== 'onegin') {
+                showNotification('Ошибка', 'У вас нет доступа к админ панели', 'error');
+                showPage('feed');
+                return;
+            }
+            
+            document.getElementById('adminTotalUsers').textContent = users.length;
+            document.getElementById('adminOnlineUsers').textContent = onlineUsers.size;
+            document.getElementById('adminTotalPosts').textContent = posts.length;
+            
+            const usersList = document.getElementById('adminUsersList');
+            usersList.innerHTML = '';
+            
+            users.slice(0, 20).forEach(user => {
+                const userItem = document.createElement('div');
+                userItem.className = 'admin-user-item';
+                
+                userItem.innerHTML = `
+                    <div style="font-size: 2rem;">${user.emoji}</div>
+                    <div class="admin-user-info">
+                        <div style="font-weight: 600; font-size: 1.1rem;">
+                            @${user.username}
+                            ${user.is_verified ? '<i class="fas fa-check-circle verified-badge" style="color: #fbbf24; margin-left: 5px;"></i>' : ''}
+                        </div>
+                        <div style="color: rgba(255,255,255,0.8); margin-bottom: 5px;">${user.display_name}</div>
+                        <div style="font-size: 0.9rem; color: rgba(255,255,255,0.6);">
+                            Постов: ${user.posts_count || 0} • 
+                            Подписчиков: ${user.followers_count || 0}
+                        </div>
+                    </div>
+                    <button class="admin-verify-btn ${user.is_verified ? 'verified' : ''}">
+                        ${user.is_verified ? '✅ Верифицирован' : 'Верифицировать'}
+                    </button>
+                `;
+                
+                userItem.querySelector('button').addEventListener('click', async () => {
+                    const isVerified = !user.is_verified;
+                    
+                    try {
+                        const { error } = await supabase
+                            .from('users')
+                            .update({ is_verified: isVerified })
+                            .eq('id', user.id);
+                        
+                        if (error) throw error;
+                        
+                        user.is_verified = isVerified;
+                        loadAdminPanel();
+                        updateUI();
+                        
+                        showNotification('Успех', 
+                            `${user.display_name} ${isVerified ? 'верифицирован' : 'лишен верификации'}`, 
+                            'success'
+                        );
+                        
+                    } catch (error) {
+                        console.error('Ошибка верификации:', error);
+                        showNotification('Ошибка', 'Не удалось изменить статус верификации', 'error');
+                    }
+                });
+                
+                usersList.appendChild(userItem);
+            });
+        }
+        
+        // ========== УПРАВЛЕНИЕ СТРАНИЦАМИ ==========
+        function showPage(pageName) {
+            // Скрываем все страницы
+            const pages = ['feed', 'profiles', 'clans', 'messages', 'notifications', 'admin'];
+            pages.forEach(page => {
+                document.getElementById(`${page}Page`).classList.add('hidden');
+                document.querySelector(`.nav-links a[data-page="${page}"]`)?.classList.remove('active');
+            });
+            
+            // Скрываем/показываем правую панель
+            const rightPanel = document.getElementById('rightPanel');
+            if (pageName === 'feed') {
+                rightPanel.classList.remove('hidden');
+            } else {
+                rightPanel.classList.add('hidden');
+            }
+            
+            // Показываем нужную страницу
+            document.getElementById(`${pageName}Page`).classList.remove('hidden');
+            document.querySelector(`.nav-links a[data-page="${pageName}"]`)?.classList.add('active');
+            
+            // Загружаем данные для страницы
+            switch (pageName) {
+                case 'feed':
+                    loadPosts();
+                    break;
+                case 'profiles':
+                    loadAllProfiles();
+                    break;
+                case 'clans':
+                    loadAllClans();
+                    break;
+                case 'messages':
+                    loadConversations();
+                    break;
+                case 'notifications':
+                    displayNotifications();
+                    updateNotificationsBadge();
+                    break;
+                case 'admin':
+                    loadAdminPanel();
+                    break;
+            }
+        }
+        
+        function showMainApp() {
+            document.getElementById('authPage').style.display = 'none';
+            document.getElementById('mainApp').classList.remove('hidden');
+            updateUI();
+            showPage('feed');
+        }
+        
+        function showAuthPage() {
+            document.getElementById('authPage').style.display = 'flex';
+            document.getElementById('mainApp').classList.add('hidden');
+        }
+        
+        // ========== ИНИЦИАЛИЗАЦИЯ ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            // Инициализируем эмодзи селекторы
+            const emojiSelectors = document.querySelectorAll('.emoji-selector');
+            emojiSelectors.forEach(selector => {
+                availableEmojis.forEach(emoji => {
+                    const option = document.createElement('div');
+                    option.className = 'emoji-option';
+                    option.textContent = emoji;
+                    option.title = emoji;
+                    
+                    option.addEventListener('click', function() {
+                        this.parentNode.querySelectorAll('.emoji-option').forEach(opt => {
+                            opt.classList.remove('selected');
+                        });
+                        this.classList.add('selected');
+                        
+                        if (this.parentNode.id === 'registerEmojiSelector') {
+                            document.getElementById('regEmoji').value = emoji;
+                        }
+                    });
+                    
+                    selector.appendChild(option);
+                });
+                
+                // Выбираем первый эмодзи по умолчанию
+                if (selector.children.length > 0) {
+                    selector.children[0].classList.add('selected');
+                }
+            });
+            
+            // Инициализируем Supabase
+            initializeSupabase();
+            
+            // Обработчики вкладок авторизации
+            document.getElementById('loginTab').addEventListener('click', () => {
+                document.getElementById('loginTab').classList.add('active');
+                document.getElementById('registerTab').classList.remove('active');
+                document.getElementById('loginForm').classList.add('active');
+                document.getElementById('registerForm').classList.remove('active');
+            });
+            
+            document.getElementById('registerTab').addEventListener('click', () => {
+                document.getElementById('registerTab').classList.add('active');
+                document.getElementById('loginTab').classList.remove('active');
+                document.getElementById('registerForm').classList.add('active');
+                document.getElementById('loginForm').classList.remove('active');
+            });
+            
+            // Регистрация
+			document.getElementById('registerForm').addEventListener('submit', async (e) => {
+			  e.preventDefault();
+			  
+			  const username = document.getElementById('regUsername').value.trim();
+			  const displayName = document.getElementById('regDisplayName').value.trim();
+			  const description = document.getElementById('regDescription').value.trim();
+			  const emoji = document.getElementById('regEmoji').value;
+			  const password = document.getElementById('regPassword').value;
+			  const confirmPassword = document.getElementById('regConfirmPassword').value;
 
-		// ========== ЗАГРУЗКА ДАННЫХ ==========
-
-		function updateClans() {
-		  clans = {};
-		  
-		  users.forEach(user => {
-			if (!clans[user.clan]) {
-			  clans[user.clan] = {
-				emoji: user.clan,
-				members: 0,
-				posts: 0
-			  };
-			}
-			clans[user.clan].members++;
-		  });
-
-		  posts.forEach(post => {
-			const user = users.find(u => u.id === post.user_id);
-			if (user && clans[user.clan]) {
-			  clans[user.clan].posts++;
-			}
-		  });
-		}
-
-		async function loadNotifications() {
-		  if (!currentUser) return;
-		  
-		  try {
-			const { data: notifs, error } = await supabase
-			  .from('notifications')
-			  .select('*')
-			  .eq('user_id', currentUser.id)
-			  .order('created_at', { ascending: false });
-			
-			if (!error) {
-			  notifications = notifs || [];
-			}
-		  } catch (error) {
-			console.error('Ошибка загрузки уведомлений:', error);
-		  }
-		}
-
-		async function loadConversations() {
-		  if (!currentUser) return;
-		  
-		  try {
-			const { data: convs, error } = await supabase
-			  .from('conversations')
-			  .select('*')
-			  .contains('participants', [currentUser.id])
-			  .order('updated_at', { ascending: false });
-			
-			if (!error) {
-			  conversations = convs || [];
-			}
-		  } catch (error) {
-			console.error('Ошибка загрузки диалогов:', error);
-		  }
-		}
-
-		// ========== ОБНОВЛЕНИЕ ИНТЕРФЕЙСА ==========
-
-		function updateUI() {
-		  if (!currentUser) return;
-
-		  // Обновляем информацию о текущем пользователе
-		  const userEmojiEl = document.getElementById('userEmoji');
-		  const userUsernameEl = document.getElementById('userUsername');
-		  const userClanEl = document.getElementById('userClan');
-		  const profileEmojiEl = document.getElementById('profileEmoji');
-		  const profileNameEl = document.getElementById('profileName');
-		  const profileUsernameEl = document.getElementById('profileUsername');
-		  const profileClanEl = document.getElementById('profileClan');
-		  const currentUserEmojiEl = document.getElementById('currentUserEmoji');
-		  const userDescriptionEl = document.getElementById('userDescription');
-		  const statPostsEl = document.getElementById('statPosts');
-		  const statFollowersEl = document.getElementById('statFollowers');
-		  const statFollowingEl = document.getElementById('statFollowing');
-
-		  if (userEmojiEl) userEmojiEl.textContent = currentUser.emoji;
-		  if (userUsernameEl) userUsernameEl.textContent = `@${currentUser.username}`;
-		  if (userClanEl) userClanEl.textContent = currentUser.clan;
-		  if (profileEmojiEl) profileEmojiEl.textContent = currentUser.emoji;
-		  if (profileNameEl) profileNameEl.textContent = currentUser.display_name;
-		  if (profileUsernameEl) profileUsernameEl.textContent = `@${currentUser.username}`;
-		  if (profileClanEl) profileClanEl.textContent = currentUser.clan;
-		  if (currentUserEmojiEl) currentUserEmojiEl.textContent = currentUser.emoji;
-		  if (userDescriptionEl) userDescriptionEl.textContent = currentUser.description || 'Пользователь пока ничего не написал в описании';
-		  if (statPostsEl) statPostsEl.textContent = currentUser.posts_count || 0;
-		  if (statFollowersEl) statFollowersEl.textContent = currentUser.followers_count || 0;
-		  if (statFollowingEl) statFollowingEl.textContent = currentUser.following_count || 0;
-
-		  // Показываем галочку верификации если есть
-		  const userVerifiedBadge = document.getElementById('userVerifiedBadge');
-		  const profileVerifiedBadge = document.getElementById('profileVerifiedBadge');
-		  
-		  if (currentUser.is_verified) {
-			if (userVerifiedBadge) userVerifiedBadge.style.display = 'inline';
-			if (profileVerifiedBadge) profileVerifiedBadge.style.display = 'inline';
-		  } else {
-			if (userVerifiedBadge) userVerifiedBadge.style.display = 'none';
-			if (profileVerifiedBadge) profileVerifiedBadge.style.display = 'none';
-		  }
-
-		  // Загружаем данные
-		  loadPosts();
-		  loadTopClans();
-		  loadRecommendations();
-		  loadAllProfiles();
-		  loadAllClans();
-		  loadNotificationsUI();
-		}
-
-		function updateOnlineStatus() {
-		  if (!currentUser) return;
-
-		  // Отмечаем текущего пользователя как онлайн
-		  onlineUsers.add(currentUser.id);
-
-		  // Обновляем статус у аватарок в постах
-		  document.querySelectorAll('.post-header').forEach(header => {
-			const userId = header.dataset.userId;
-			const statusIndicator = header.querySelector('.status-indicator');
-			
-			if (statusIndicator && userId) {
-			  const user = users.find(u => u.id === userId);
-			  const isOnline = user && onlineUsers.has(user.id);
-			  statusIndicator.className = 'status-indicator ' + (isOnline ? 'status-online' : '');
-			}
-		  });
-
-		  // Обновляем статус текущего пользователя в шапке
-		  const userStatus = document.getElementById('userStatusIndicator');
-		  if (userStatus) {
-			userStatus.className = 'status-indicator ' + (onlineUsers.has(currentUser.id) ? 'status-online' : '');
-		  }
-		}
-
-		// ========== ЗАГРУЗКА КОНТЕНТА ==========
-
-		function loadPosts() {
-		  const postsContainer = document.getElementById('postsContainer');
-		  const emptyFeed = document.getElementById('emptyFeed');
-		  
-		  if (!postsContainer || !emptyFeed) {
-			console.error('Элементы для постов не найдены');
-			return;
-		  }
-
-		  postsContainer.innerHTML = '';
-
-		  let postsToShow = [];
-		  if (currentUser && currentUser.following && currentUser.following.length > 0) {
-			postsToShow = posts.filter(post => 
-			  currentUser.following.includes(post.user_id) || post.user_id === currentUser.id
-			);
-		  } else {
-			postsToShow = [...posts];
-		  }
-
-		  postsToShow.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-		  if (postsToShow.length === 0) {
-			emptyFeed.classList.remove('hidden');
-			return;
-		  } else {
-			emptyFeed.classList.add('hidden');
-		  }
-
-		  postsToShow.forEach(post => {
-			const user = users.find(u => u.id === post.user_id);
-			if (!user) return;
-
-			const postElement = document.createElement('div');
-			postElement.className = 'post panel-card slide-up';
-			postElement.dataset.postId = post.id;
-			postElement.innerHTML = createPostHTML(post, user);
-			postsContainer.appendChild(postElement);
-			addPostEventListeners(postElement, post);
-		  });
-		}
-
-		function createPostHTML(post, user) {
-		  if (!user) return '';
-
-		  const isLiked = post.likes && post.likes.includes(currentUser?.id);
-		  const timeDiff = Date.now() - new Date(post.created_at).getTime();
-		  const hours = Math.floor(timeDiff / (1000 * 60 * 60));
-		  const timeText = hours < 1 ? 'только что' :
-			hours < 24 ? `${hours} ч назад` :
-			`${Math.floor(hours / 24)} д назад`;
-
-		  return `
-			<div class="post-header" data-user-id="${user.id}">
-			  <div class="emoji-avatar">${user.emoji}
-				<div class="status-indicator ${onlineUsers.has(user.id) ? 'status-online' : ''}"></div>
-			  </div>
-			  <div class="post-user-info">
-				<div class="post-username">
-				  @${user.username}
-				  ${user.is_verified ? '<i class="fas fa-check-circle verified-badge"></i>' : ''}
-				</div>
-				<div class="post-time">${timeText}</div>
-			  </div>
-			</div>
-			<div class="post-content">${post.content}</div>
-			<div class="post-stats">
-			  <div class="post-stat ${isLiked ? 'liked' : ''}" data-action="like">
-				<i class="${isLiked ? 'fas' : 'far'} fa-heart"></i>
-				<span>${post.likes ? post.likes.length : 0}</span>
-			  </div>
-			  <div class="post-stat" data-action="comment">
-				<i class="far fa-comment"></i>
-				<span>${post.comments_count || 0}</span>
-			  </div>
-			  <div class="post-stat" data-action="repost">
-				<i class="fas fa-retweet"></i>
-				<span>${post.reposts_count || 0}</span>
-			  </div>
-			</div>
-		  `;
-		}
-
-		function loadTopClans() {
-		  const topClansList = document.getElementById('topClansList');
-		  if (!topClansList) return;
-
-		  topClansList.innerHTML = '';
-
-		  // Сортируем кланы по количеству участников
-		  const sortedClans = Object.values(clans)
-			.sort((a, b) => b.members - a.members)
-			.slice(0, 5);
-
-		  sortedClans.forEach((clan, index) => {
-			const clanElement = document.createElement('div');
-			clanElement.className = 'clan-item';
-			clanElement.innerHTML = `
-			  <div class="clan-emoji">${clan.emoji}</div>
-			  <div class="clan-info">
-				<div class="clan-name">${clan.emoji}</div>
-				<div class="clan-members">${clan.members} участников</div>
-			  </div>
-			  <div class="clan-rank">${index + 1}</div>
-			`;
-			topClansList.appendChild(clanElement);
-		  });
-		}
-
-		function loadRecommendations() {
-		  const recommendationsList = document.getElementById('recommendationsList');
-		  if (!recommendationsList) return;
-
-		  recommendationsList.innerHTML = '';
-
-		  // Рекомендуем пользователей, на которых не подписан
-		  const notFollowing = users.filter(user => 
-			user.id !== currentUser?.id && 
-			!currentUser?.following?.includes(user.id)
-		  ).slice(0, 5);
-
-		  notFollowing.forEach(user => {
-			const recElement = document.createElement('div');
-			recElement.style.display = 'flex';
-			recElement.style.alignItems = 'center';
-			recElement.style.gap = '10px';
-			recElement.style.padding = '10px';
-			recElement.style.borderRadius = '8px';
-			recElement.style.backgroundColor = 'var(--secondary)';
-			recElement.style.cursor = 'pointer';
-			recElement.innerHTML = `
-			  <div style="font-size: 1.5rem;">${user.emoji}</div>
-			  <div style="flex: 1;">
-				<div style="font-weight: 600;">@${user.username}</div>
-				<div style="font-size: 0.9rem; color: var(--text-light);">${user.display_name}</div>
-			  </div>
-			  <button class="btn btn-primary" style="padding: 5px 10px; font-size: 0.8rem;" data-user-id="${user.id}">Подписаться</button>
-			`;
-			
-			recElement.querySelector('button').addEventListener('click', (e) => {
-			  e.stopPropagation();
-			  toggleFollow(user.id);
-			});
-			
-			recommendationsList.appendChild(recElement);
-		  });
-		}
-
-		function loadAllProfiles() {
-		  const profilesGrid = document.getElementById('profilesGrid');
-		  if (!profilesGrid) return;
-
-		  profilesGrid.innerHTML = '';
-
-		  users.forEach(user => {
-			const profileCard = document.createElement('div');
-			profileCard.className = 'profile-card';
-			profileCard.dataset.userId = user.id;
-			profileCard.innerHTML = `
-			  <div class="profile-emoji">${user.emoji}</div>
-			  <div class="profile-username">
-				@${user.username}
-				${user.is_verified ? '<i class="fas fa-check-circle verified-badge"></i>' : ''}
-			  </div>
-			  <div class="profile-clan">${user.clan}</div>
-			  <div class="profile-stats">
-				<div>
-				  <div style="font-weight: 600;">${user.posts_count || 0}</div>
-				  <div style="font-size: 0.9rem; color: var(--text-light);">Постов</div>
-				</div>
-				<div>
-				  <div style="font-weight: 600;">${user.followers_count || 0}</div>
-				  <div style="font-size: 0.9rem; color: var(--text-light);">Подписчиков</div>
-				</div>
-			  </div>
-			`;
-			profileCard.addEventListener('click', () => showUserProfile(user.id));
-			profilesGrid.appendChild(profileCard);
-		  });
-		}
-
-		function loadAllClans() {
-		  const allClansList = document.getElementById('allClansList');
-		  if (!allClansList) return;
-
-		  allClansList.innerHTML = '';
-
-		  Object.values(clans).forEach(clan => {
-			const clanCard = document.createElement('div');
-			clanCard.style.padding = '15px';
-			clanCard.style.backgroundColor = 'var(--card-bg)';
-			clanCard.style.borderRadius = 'var(--radius)';
-			clanCard.style.boxShadow = 'var(--shadow)';
-			clanCard.style.cursor = 'pointer';
-			clanCard.innerHTML = `
-			  <div style="font-size: 2rem; margin-bottom: 10px;">${clan.emoji}</div>
-			  <div style="font-weight: 600; margin-bottom: 5px;">${clan.emoji}</div>
-			  <div style="color: var(--text-light);">${clan.members} участников</div>
-			  <div style="color: var(--text-light); margin-top: 5px;">${clan.posts} постов</div>
-			`;
-			allClansList.appendChild(clanCard);
-		  });
-		}
-
-		function loadNotificationsUI() {
-		  const notificationsList = document.getElementById('notificationsList');
-		  if (!notificationsList) return;
-
-		  notificationsList.innerHTML = '';
-
-		  if (notifications.length === 0) {
-			notificationsList.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-light);">У вас пока нет уведомлений</div>';
-			return;
-		  }
-
-		  notifications.slice(0, 20).forEach(notification => {
-			const notifElement = document.createElement('div');
-			notifElement.className = 'notification-item';
-			notifElement.style.padding = '15px';
-			notifElement.style.borderBottom = '1px solid var(--border)';
-			notifElement.innerHTML = `
-			  <div style="display: flex; align-items: center; gap: 10px;">
-				<div style="font-size: 1.5rem;">${notification.from_user_id ? '👤' : '🔔'}</div>
-				<div style="flex: 1;">
-				  <div style="font-weight: 600;">${notification.message || notification.type}</div>
-				  <div style="font-size: 0.9rem; color: var(--text-light);">${new Date(notification.created_at).toLocaleDateString()}</div>
-				</div>
-			  </div>
-			`;
-			notificationsList.appendChild(notifElement);
-		  });
-		}
-
-		// ========== УПРАВЛЕНИЕ СТРАНИЦАМИ ==========
-
-		function showPage(pageName) {
-		  // Скрываем все страницы
-		  const pages = ['feedContent', 'profilesPage', 'clansPage', 'notificationsPage', 'adminPanelPage'];
-		  pages.forEach(pageId => {
-			const page = document.getElementById(pageId);
-			if (page) page.classList.add('hidden');
-		  });
-
-		  // Скрываем правую панель по умолчанию
-		  const rightPanel = document.getElementById('rightPanel');
-		  if (rightPanel) rightPanel.classList.add('hidden');
-
-		  // Убираем активный класс у всех ссылок
-		  document.querySelectorAll('.nav-links a').forEach(link => {
-			link.classList.remove('active');
-		  });
-
-		  // Показываем нужную страницу
-		  switch (pageName) {
-			case 'feed':
-			  document.getElementById('feedContent')?.classList.remove('hidden');
-			  document.getElementById('rightPanel')?.classList.remove('hidden');
-			  document.querySelector('.nav-links a[data-page="feed"]')?.classList.add('active');
-			  loadPosts();
-			  break;
-			case 'profiles':
-			  document.getElementById('profilesPage')?.classList.remove('hidden');
-			  document.querySelector('.nav-links a[data-page="profiles"]')?.classList.add('active');
-			  loadAllProfiles();
-			  break;
-			case 'clans':
-			  document.getElementById('clansPage')?.classList.remove('hidden');
-			  document.querySelector('.nav-links a[data-page="clans"]')?.classList.add('active');
-			  loadAllClans();
-			  break;
-			case 'notifications':
-			  document.getElementById('notificationsPage')?.classList.remove('hidden');
-			  document.querySelector('.nav-links a[data-page="notifications"]')?.classList.add('active');
-			  loadNotificationsUI();
-			  break;
-			case 'admin':
-			  if (currentUser?.username === 'onegin') {
-				document.getElementById('adminPanelPage')?.classList.remove('hidden');
-				document.querySelector('.nav-links a[data-page="admin"]')?.classList.add('active');
-				loadAdminPanel();
-			  } else {
-				showPage('feed');
+			  // Валидация
+			  if (!username.startsWith('@')) {
+				showNotification('Ошибка', 'Юзернейм должен начинаться с @', 'error');
+				return;
 			  }
-			  break;
-		  }
-		}
+			  
+			  if (username.length < 3) {
+				showNotification('Ошибка', 'Юзернейм должен содержать не менее 3 символов', 'error');
+				return;
+			  }
+			  
+			  if (password.length < 6) {
+				showNotification('Ошибка', 'Пароль должен содержать не менее 6 символов', 'error');
+				return;
+			  }
+			  
+			  if (password !== confirmPassword) {
+				showNotification('Ошибка', 'Пароли не совпадают', 'error');
+				return;
+			  }
 
-		function showMainApp() {
-		  document.getElementById('authPage')?.classList.add('hidden');
-		  document.getElementById('mainApp')?.classList.remove('hidden');
-		  showPage('feed');
-		  
-		  // Показываем админку если @onegin
-		  if (currentUser?.username === 'onegin') {
-			document.getElementById('adminLink')?.style.setProperty('display', 'block');
-		  }
-		}
+			  // Убираем @ из юзернейма для хранения в БД
+			  const cleanUsername = username.substring(1);
 
-		function showAuthPage() {
-		  document.getElementById('authPage')?.classList.remove('hidden');
-		  document.getElementById('mainApp')?.classList.add('hidden');
-		}
+			  const result = await registerUser({
+				username: cleanUsername,
+				displayName: displayName,
+				description: description,
+				emoji: emoji,
+				password: password
+			  });
 
-		// ========== СОЗДАНИЕ ПОСТА ==========
+			  if (result.success) {
+				showNotification('Успех', 'Регистрация прошла успешно!', 'success');
+				setTimeout(() => {
+				  document.getElementById('loginUsername').value = username;
+				  document.getElementById('loginTab').click();
+				}, 1000);
+			  } else {
+				showNotification('Ошибка', result.error || 'Ошибка регистрации', 'error');
+			  }
+			});
 
-		async function createPost(content) {
-		  if (!currentUser || !content.trim()) return;
+			// Вход
+			document.getElementById('loginForm').addEventListener('submit', async (e) => {
+			  e.preventDefault();
+			  
+			  const username = document.getElementById('loginUsername').value.trim();
+			  const password = document.getElementById('loginPassword').value;
 
-		  try {
-			const { data: newPost, error } = await supabase
-			  .from('posts')
-			  .insert([{
-				user_id: currentUser.id,
-				content: content.trim(),
-				likes: [],
-				comments_count: 0,
-				reposts_count: 0
-			  }])
-			  .select()
-			  .single();
+			  // Убираем @ из юзернейма для поиска в БД
+			  const cleanUsername = username.startsWith('@') ? username.substring(1) : username;
 
-			if (error) {
-			  console.error('Ошибка создания поста:', error);
-			  throw error;
-			}
+			  const result = await loginUser(cleanUsername, password);
 
-			// Добавляем пост в локальный массив
-			posts.unshift(newPost);
+			  if (result.success) {
+				currentUser = result.user;
+				localStorage.setItem('mirror_user', JSON.stringify(currentUser));
+				showNotification('Успех', `Добро пожаловать, ${username}!`, 'success');
+				
+				setTimeout(() => {
+				  showMainApp();
+				}, 1000);
+			  } else {
+				showNotification('Ошибка', result.error || 'Неверный юзернейм или пароль', 'error');
+			  }
+			});
 
-			// Обновляем счётчик постов у пользователя
-			currentUser.posts_count = (currentUser.posts_count || 0) + 1;
-			await supabase
-			  .from('users')
-			  .update({ posts_count: currentUser.posts_count })
-			  .eq('id', currentUser.id);
-
-			// Сохраняем в localStorage
-			localStorage.setItem('mirror_user', JSON.stringify(currentUser));
-
-			// Обновляем UI
-			loadPosts();
-			showNotification('Успех', 'Пост опубликован!', 'success');
-
-			return { success: true, post: newPost };
-		  } catch (error) {
-			console.error('Ошибка создания поста:', error);
-			showNotification('Ошибка', 'Не удалось опубликовать пост', 'error');
-			return { success: false, error: error.message };
-		  }
-		}
-
-		// ========== ОБРАБОТЧИКИ СОБЫТИЙ ==========
-
-		// Публикация поста
-		document.getElementById('publishPostBtn')?.addEventListener('click', async () => {
-		  const postText = document.getElementById('postText');
-		  const content = postText?.value.trim();
-
-		  if (!content) {
-			showNotification('Ошибка', 'Введите текст поста', 'error');
-			return;
-		  }
-
-		  const result = await createPost(content);
-
-		  if (result.success) {
-			if (postText) postText.value = '';
-		  }
-		});
-
-		// Регистрация
-		document.getElementById('registerForm')?.addEventListener('submit', async (e) => {
-		  e.preventDefault();
-		  
-		  const username = document.getElementById('regUsername')?.value.trim();
-		  const displayName = document.getElementById('regDisplayName')?.value.trim();
-		  const description = document.getElementById('regDescription')?.value.trim() || '';
-		  const emoji = document.getElementById('regEmoji')?.value || '😀';
-		  const password = document.getElementById('regPassword')?.value;
-		  const confirmPassword = document.getElementById('regConfirmPassword')?.value;
-
-		  // Валидация
-		  if (!username || !username.startsWith('@')) {
-			showNotification('Ошибка', 'Юзернейм должен начинаться с @', 'error');
-			return;
-		  }
-		  
-		  if (username.length < 4) {
-			showNotification('Ошибка', 'Юзернейм должен содержать не менее 3 символов (без @)', 'error');
-			return;
-		  }
-		  
-		  if (!password || password.length < 6) {
-			showNotification('Ошибка', 'Пароль должен содержать не менее 6 символов', 'error');
-			return;
-		  }
-		  
-		  if (password !== confirmPassword) {
-			showNotification('Ошибка', 'Пароли не совпадают', 'error');
-			return;
-		  }
-
-		  // Убираем @ из юзернейма для хранения в БД
-		  const cleanUsername = username.substring(1);
-
-		  const result = await registerUser({
-			username: cleanUsername,
-			displayName: displayName,
-			description: description,
-			emoji: emoji,
-			password: password
-		  });
-
-		  if (result.success) {
-			showNotification('Успех', 'Регистрация прошла успешно!', 'success');
-			setTimeout(() => {
-			  document.getElementById('loginUsername').value = username;
-			  document.getElementById('loginTab').click();
-			}, 1000);
-		  } else {
-			showNotification('Ошибка', result.error || 'Ошибка регистрации', 'error');
-		  }
-		});
-
-		// Вход
-		document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
-		  e.preventDefault();
-		  
-		  const username = document.getElementById('loginUsername')?.value.trim();
-		  const password = document.getElementById('loginPassword')?.value;
-
-		  if (!username || !password) {
-			showNotification('Ошибка', 'Заполните все поля', 'error');
-			return;
-		  }
-
-		  // Убираем @ из юзернейма для поиска в БД
-		  const cleanUsername = username.startsWith('@') ? username.substring(1) : username;
-
-		  const result = await loginUser(cleanUsername, password);
-
-		  if (result.success) {
-			currentUser = result.user;
-			localStorage.setItem('mirror_user', JSON.stringify(currentUser));
-			showNotification('Успех', `Добро пожаловать, ${username}!`, 'success');
-			
-			setTimeout(() => {
-			  showMainApp();
-			}, 1000);
-		  } else {
-			showNotification('Ошибка', result.error || 'Неверный юзернейм или пароль', 'error');
-		  }
-		});
-
-		// Выход
-		document.getElementById('logoutBtn')?.addEventListener('click', () => {
-		  logoutUser();
-		});
-
-		// Переключение вкладок авторизации
-		document.getElementById('loginTab')?.addEventListener('click', function() {
-		  document.getElementById('loginTab')?.classList.add('active');
-		  document.getElementById('registerTab')?.classList.remove('active');
-		  document.getElementById('loginForm')?.classList.add('active');
-		  document.getElementById('registerForm')?.classList.remove('active');
-		});
-
-		document.getElementById('registerTab')?.addEventListener('click', function() {
-		  document.getElementById('registerTab')?.classList.add('active');
-		  document.getElementById('loginTab')?.classList.remove('active');
-		  document.getElementById('registerForm')?.classList.add('active');
-		  document.getElementById('loginForm')?.classList.remove('active');
-		});
-
-		// Навигация
-		document.querySelectorAll('.nav-links a').forEach(link => {
-		  link.addEventListener('click', (e) => {
-			e.preventDefault();
-			const page = link.dataset.page;
-			if (page) showPage(page);
-		  });
-		});
-
-		// ========== ИНИЦИАЛИЗАЦИЯ ==========
-
-		document.addEventListener('DOMContentLoaded', () => {
-		  console.log('Документ загружен, инициализируем...');
-		  initializeSupabase();
-		});
-
-		// Отслеживаем активность для онлайн статуса
-		let lastActivity = Date.now();
-		document.addEventListener('mousemove', () => {
-		  lastActivity = Date.now();
-		  if (currentUser) {
-			onlineUsers.add(currentUser.id);
-			updateOnlineStatus();
-		  }
-		});
-
-		setInterval(() => {
-		  if (currentUser && (Date.now() - lastActivity) < 5 * 60 * 1000) {
-			onlineUsers.add(currentUser.id);
-		  } else {
-			onlineUsers.delete(currentUser?.id);
-		  }
-		  updateOnlineStatus();
-		}, 30000);
+			// Выход
+			document.getElementById('logoutBtn').addEventListener('click', () => {
+			  logoutUser();
+			});
+            
+            // Навигация
+            document.querySelectorAll('.nav-links a').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const pageName = link.dataset.page;
+                    showPage(pageName);
+                });
+            });
+            
+            document.getElementById('logo').addEventListener('click', (e) => {
+                e.preventDefault();
+                showPage('feed');
+            });
+            
+            // Создание поста
+            document.getElementById('publishPostBtn').addEventListener('click', () => {
+                const content = document.getElementById('postText').value.trim();
+                if (!content) {
+                    showNotification('Ошибка', 'Введите текст поста', 'error');
+                    return;
+                }
+                
+                createPost(content);
+                document.getElementById('postText').value = '';
+            });
+            
+            // Редактирование профиля
+            document.getElementById('editProfileBtn').addEventListener('click', () => {
+                const modal = document.getElementById('profileModal');
+                document.getElementById('editDisplayName').value = currentUser.display_name;
+                document.getElementById('editDescription').value = currentUser.description || '';
+                modal.classList.add('active');
+            });
+            
+            document.getElementById('saveProfileBtn').addEventListener('click', async () => {
+                const displayName = document.getElementById('editDisplayName').value.trim();
+                const description = document.getElementById('editDescription').value.trim();
+                
+                if (!displayName) {
+                    showNotification('Ошибка', 'Введите отображаемое имя', 'error');
+                    return;
+                }
+                
+                try {
+                    const { error } = await supabase
+                        .from('users')
+                        .update({ 
+                            display_name: displayName,
+                            description: description 
+                        })
+                        .eq('id', currentUser.id);
+                    
+                    if (error) throw error;
+                    
+                    currentUser.display_name = displayName;
+                    currentUser.description = description;
+                    
+                    updateUI();
+                    document.getElementById('profileModal').classList.remove('active');
+                    showNotification('Успех', 'Профиль обновлен', 'success');
+                    
+                } catch (error) {
+                    console.error('Ошибка обновления профиля:', error);
+                    showNotification('Ошибка', 'Не удалось обновить профиль', 'error');
+                }
+            });
+            
+            // Смена клана
+            document.getElementById('changeClanBtn').addEventListener('click', () => {
+                const modal = document.getElementById('clanModal');
+                const selector = document.getElementById('clanEmojiSelector');
+                
+                selector.querySelectorAll('.emoji-option').forEach(option => {
+                    if (option.textContent === currentUser.clan) {
+                        option.classList.add('selected');
+                    } else {
+                        option.classList.remove('selected');
+                    }
+                });
+                
+                modal.classList.add('active');
+            });
+            
+            document.getElementById('saveClanBtn').addEventListener('click', async () => {
+                const selectedEmoji = document.querySelector('#clanEmojiSelector .emoji-option.selected');
+                if (!selectedEmoji) return;
+                
+                const emoji = selectedEmoji.textContent;
+                
+                try {
+                    const { error } = await supabase
+                        .from('users')
+                        .update({ clan: emoji, emoji: emoji })
+                        .eq('id', currentUser.id);
+                    
+                    if (error) throw error;
+                    
+                    currentUser.clan = emoji;
+                    currentUser.emoji = emoji;
+                    
+                    updateUI();
+                    document.getElementById('clanModal').classList.remove('active');
+                    showNotification('Успех', `Клан изменен на ${emoji}`, 'success');
+                    
+                } catch (error) {
+                    console.error('Ошибка смены клана:', error);
+                    showNotification('Ошибка', 'Не удалось сменить клан', 'error');
+                }
+            });
+            
+            // Отправка сообщений
+            document.getElementById('sendMessageBtn').addEventListener('click', () => {
+                const input = document.getElementById('messageInput');
+                const content = input.value.trim();
+                if (content) {
+                    sendMessage(content);
+                }
+            });
+            
+            document.getElementById('messageInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    document.getElementById('sendMessageBtn').click();
+                }
+            });
+            
+            // Выход
+            document.getElementById('logoutBtn').addEventListener('click', () => {
+                if (confirm('Вы действительно хотите выйти?')) {
+                    logoutUser();
+                }
+            });
+            
+            // Закрытие модальных окон
+            document.querySelectorAll('.close-modal').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    this.closest('.modal').classList.remove('active');
+                });
+            });
+            
+            // Отслеживание активности для онлайн статуса
+            document.addEventListener('mousemove', () => {
+                lastActivity = Date.now();
+                onlineUsers.add(currentUser?.id);
+                updateOnlineStatus();
+            });
+            
+            setInterval(() => {
+                if (currentUser && (Date.now() - lastActivity) < 5 * 60 * 1000) {
+                    onlineUsers.add(currentUser.id);
+                } else {
+                    onlineUsers.delete(currentUser?.id);
+                }
+                updateOnlineStatus();
+                loadOnlineUsers();
+            }, 30000);
+        });
     </script>
 </body>
 </html>
