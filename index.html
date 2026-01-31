@@ -1508,7 +1508,11 @@
     </div>
 
     <script>
-	// ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
+		// Supabase настройки
+		const supabaseUrl = 'https://kzbznupjamhualdewyxk.supabase.co';
+		const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6YnpudXBqYW1odWFsZGV3eXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgzNDY5OTQsImV4cCI6MjA1MzkyMjk5NH0.7Ll6UZ5BnQwJq9JYv2Z8X7Qw3y5X6Z8X7Qw3y5X6Z8';
+		const supabase = window.supabase.create({ supabaseUrl, supabaseKey });
+		// ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
 		let currentUser = null;
 		let allUsers = [];
 		let allPosts = [];
@@ -1516,10 +1520,7 @@
 		let clans = {};
 		let onlineUsers = new Set();
 
-		// Supabase настройки
-		const supabaseUrl = 'https://kzbznupjamhualdewyxk.supabase.co';
-		const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6YnpudXBqYW1odWFsZGV3eXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgzNDY5OTQsImV4cCI6MjA1MzkyMjk5NH0.7Ll6UZ5BnQwJq9JYv2Z8X7Qw3y5X6Z8X7Qw3y5X6Z8';
-		const supabase = window.supabase.create({ supabaseUrl, supabaseKey });
+
 
 		// Эмодзи для выбора
 		const availableEmojis = ['😀', '😎', '🤖', '👻', '🐱', '🦊', '🐶', '🦁', '🚀', '🎨', '🎮', '🎵', '📸', '📚', '🍳', '🌍', '👨‍💻', '👩‍💻', '🧠', '💡', '🔥', '🌟', '🌙', '☀️', '🌈', '🍕', '⚽', '🎭', '🎸', '🎬'];
