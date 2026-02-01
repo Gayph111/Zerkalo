@@ -2444,137 +2444,137 @@
     </div>
 
     <!-- Вложенные компоненты -->
-    <script type="text/template" id="postTemplate">
-        <div class="card post" data-post-id="{{id}}">
-            {{#if original_post_id}}
-            <div class="repost-header">
-                <i class="fas fa-retweet"></i>
-                <span>{{user.username}} репостнул(а)</span>
-            </div>
-            {{/if}}
-            
-            <div class="post-header">
-                <div class="post-author">
-                    <div class="user-avatar cursor-pointer view-profile" data-user-id="{{user.id}}">
-                        <span>{{user.emoji}}</span>
-                        <div class="status-indicator {{#if user.is_online}}status-online{{else}}status-offline{{/if}}"></div>
-                    </div>
-                    <div class="post-author-info">
-                        <div class="post-author-name">
-                            <span class="view-profile cursor-pointer" data-user-id="{{user.id}}">{{user.username}}</span>
-                            {{#if user.is_verified}}
-                            <i class="fas fa-check-circle verified-badge"></i>
-                            {{/if}}
-                        </div>
-                        <div class="post-meta">
-                            <span class="post-time" title="{{created_at}}">{{timeAgo}}</span>
-                            {{#if file_url}}
-                            <i class="fas fa-paperclip"></i>
-                            {{/if}}
-                            {{#if voice_url}}
-                            <i class="fas fa-microphone"></i>
-                            {{/if}}
-                        </div>
-                    </div>
-                </div>
-                <button class="btn-icon post-menu-btn" data-post-id="{{id}}">
-                    <i class="fas fa-ellipsis-h"></i>
-                </button>
-            </div>
+	<script type="text/template" id="postTemplate">
+		<div class="card post" data-post-id="{{id}}">
+			{{#if original_post_id}}
+			<div class="repost-header">
+				<i class="fas fa-retweet"></i>
+				<span>{{user.username}} репостнул(а)</span>
+			</div>
+			{{/if}}
+			
+			<div class="post-header">
+				<div class="post-author">
+					<div class="user-avatar cursor-pointer view-profile" data-user-id="{{user.id}}">
+						<span>{{user.emoji}}</span>
+						<div class="status-indicator {{#if user.is_online}}status-online{{else}}status-offline{{/if}}"></div>
+					</div>
+					<div class="post-author-info">
+						<div class="post-author-name">
+							<span class="view-profile cursor-pointer" data-user-id="{{user.id}}">{{user.username}}</span>
+							{{#if user.is_verified}}
+							<i class="fas fa-check-circle verified-badge"></i>
+							{{/if}}
+						</div>
+						<div class="post-meta">
+							<span class="post-time" title="{{created_at}}">{{timeAgo}}</span>
+							{{#if file_url}}
+							<i class="fas fa-paperclip"></i>
+							{{/if}}
+							{{#if voice_url}}
+							<i class="fas fa-microphone"></i>
+							{{/if}}
+						</div>
+					</div>
+				</div>
+				<button class="btn-icon post-menu-btn" data-post-id="{{id}}">
+					<i class="fas fa-ellipsis-h"></i>
+				</button>
+			</div>
 
-            <div class="post-content">
-                {{content}}
-                
-                {{#if file_url}}
-                <div class="post-attachment mt-3">
-                    {{#if isImage}}
-                    <img src="{{file_url}}" alt="{{file_name}}" loading="lazy">
-                    {{else}}
-                    <div class="attachment-info">
-                        <i class="fas fa-file"></i>
-                        <span>{{file_name}} ({{fileSize}})</span>
-                    </div>
-                    {{/if}}
-                </div>
-                {{/if}}
+			<div class="post-content">
+				{{content}}
+				
+				{{#if file_url}}
+				<div class="post-attachment mt-3">
+					{{#if isImage}}
+					<img src="{{file_url}}" alt="{{file_name}}" loading="lazy">
+					{{else}}
+					<div class="attachment-info">
+						<i class="fas fa-file"></i>
+						<span>{{file_name}} ({{fileSize}})</span>
+					</div>
+					{{/if}}
+				</div>
+				{{/if}}
 
-                {{#if voice_url}}
-                <div class="voice-message mt-3">
-                    <button class="voice-play-btn">
-                        <i class="fas fa-play"></i>
-                    </button>
-                    <div class="voice-waveform">
-                        <div class="voice-wave"></div>
-                    </div>
-                    <div class="voice-duration">{{voiceDuration}}</div>
-                </div>
-                {{/if}}
+				{{#if voice_url}}
+				<div class="voice-message mt-3">
+					<button class="voice-play-btn">
+						<i class="fas fa-play"></i>
+					</button>
+					<div class="voice-waveform">
+						<div class="voice-wave"></div>
+					</div>
+					<div class="voice-duration">{{voiceDuration}}</div>
+				</div>
+				{{/if}}
 
-                {{#if original_post}}
-                <div class="repost-content mt-3">
-                    <div class="post-author mb-2">
-                        <div class="user-avatar">
-                            <span>{{original_post.user.emoji}}</span>
-                        </div>
-                        <div class="post-author-info">
-                            <div class="post-author-name">
-                                {{original_post.user.username}}
-                                {{#if original_post.user.is_verified}}
-                                <i class="fas fa-check-circle verified-badge"></i>
-                                {{/if}}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="post-content">
-                        {{original_post.content}}
-                    </div>
-                </div>
-                {{/if}}
-            </div>
+				{{#if original_post}}
+				<div class="repost-content mt-3">
+					<div class="post-author mb-2">
+						<div class="user-avatar">
+							<span>{{original_post.user.emoji}}</span>
+						</div>
+						<div class="post-author-info">
+							<div class="post-author-name">
+								{{original_post.user.username}}
+								{{#if original_post.user.is_verified}}
+								<i class="fas fa-check-circle verified-badge"></i>
+								{{/if}}
+							</div>
+						</div>
+					</div>
+					<div class="post-content">
+						{{original_post.content}}
+					</div>
+				</div>
+				{{/if}}
+			</div>
 
-            <div class="post-stats">
-                <div class="post-stat {{#if liked}}liked{{/if}}" data-action="like">
-                    <i class="{{#if liked}}fas{{else}}far{{/if}} fa-heart"></i>
-                    <span>{{likes_count}}</span>
-                </div>
-                <div class="post-stat" data-action="comment">
-                    <i class="far fa-comment"></i>
-                    <span>{{comments_count}}</span>
-                </div>
-                <div class="post-stat" data-action="repost">
-                    <i class="fas fa-retweet"></i>
-                    <span>{{reposts_count}}</span>
-                </div>
-            </div>
+			<div class="post-stats">
+				<div class="post-stat {{#if liked}}liked{{/if}}" data-action="like">
+					<i class="{{#if liked}}fas{{else}}far{{/if}} fa-heart"></i>
+					<span>{{likes_count}}</span>
+				</div>
+				<div class="post-stat" data-action="comment">
+					<i class="far fa-comment"></i>
+					<span>{{comments_count}}</span>
+				</div>
+				<div class="post-stat" data-action="repost">
+					<i class="fas fa-retweet"></i>
+						<span>{{reposts_count}}</span>
+				</div>
+			</div>
 
-            <div class="post-actions-bottom">
-                <button class="action-btn like-btn {{#if liked}}active{{/if}}" data-post-id="{{id}}">
-                    <i class="{{#if liked}}fas{{else}}far{{/if}} fa-heart"></i>
-                    <span>Нравится</span>
-                </button>
-                <button class="action-btn comment-btn" data-post-id="{{id}}">
-                    <i class="far fa-comment"></i>
-                    <span>Комментировать</span>
-                </button>
-                <button class="action-btn repost-btn" data-post-id="{{id}}">
-                    <i class="fas fa-retweet"></i>
-                    <span>Репост</span>
-                </button>
-            </div>
+			<div class="post-actions-bottom">
+				<button class="action-btn like-btn {{#if liked}}active{{/if}}" data-post-id="{{id}}">
+					<i class="{{#if liked}}fas{{else}}far{{/if}} fa-heart"></i>
+					<span>Нравится</span>
+				</button>
+				<button class="action-btn comment-btn" data-post-id="{{id}}">
+					<i class="far fa-comment"></i>
+					<span>Комментировать</span>
+				</button>
+				<button class="action-btn repost-btn" data-post-id="{{id}}">
+					<i class="fas fa-retweet"></i>
+					<span>Репост</span>
+				</button>
+			</div>
 
-            <div class="comments-section hidden" id="comments-{{id}}">
-                <div class="comments-list" id="comments-list-{{id}}">
-                    <!-- Комментарии будут загружены динамически -->
-                </div>
-                <div class="add-comment">
-                    <textarea class="comment-input" placeholder="Написать комментарий..." data-post-id="{{id}}"></textarea>
-                    <button class="btn btn-primary send-comment-btn" data-post-id="{{id}}">
-                        <i class="fas fa-paper-plane"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </script>
+			<div class="comments-section hidden" id="comments-{{id}}">
+				<div class="comments-list" id="comments-list-{{id}}">
+					<!-- Комментарии будут загружены динамически -->
+				</div>
+				<div class="add-comment">
+					<textarea class="comment-input" placeholder="Написать комментарий..." data-post-id="{{id}}"></textarea>
+					<button class="btn btn-primary send-comment-btn" data-post-id="{{id}}">
+						<i class="fas fa-paper-plane"></i>
+					</button>
+				</div>
+			</div>
+		</div>
+	</script>
 
     <script type="text/template" id="commentTemplate">
         <div class="comment" data-comment-id="{{id}}">
