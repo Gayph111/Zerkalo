@@ -2816,7 +2816,7 @@
     </script>
 
     <!-- Основной JavaScript код -->
-    <script>
+	<script>
 		// ========== КОНФИГУРАЦИЯ ==========
 		const SUPABASE_URL = 'https://kzbznupjamhualdewyxk.supabase.co';
 		const SUPABASE_KEY = 'sb_publishable_VSXNcvoaf2meTwwR8gr80g_Y_YEhSgd';
@@ -3009,7 +3009,7 @@
 					.from('users')
 					.update({
 						is_online: true,
-						last_activity: new Date().toISOString()
+						last_seen: new Date().toISOString()
 					})
 					.eq('id', currentUser.id);
 				
@@ -3205,7 +3205,7 @@
 			if (!container || !currentUser) return;
 			
 			try {
-				// Получаем пользователей, на которых не подписан текущий пользователь
+				// Исправленный запрос - без сортировки по несуществующему столбцу
 				const { data: notFollowing, error } = await supabaseClient
 					.from('users')
 					.select('*')
@@ -3843,20 +3843,29 @@
 					postData.voice_duration = attachments.voice.duration;
 				}
 				
-				// Сохраняем пост в базе данных
+				// Исправленный запрос: убираем SELECT из INSERT запроса
 				const { data: newPost, error: postError } = await supabaseClient
 					.from('posts')
-					.insert([postData])
+					.insert([postData]);
+				
+				if (postError) throw postError;
+				
+				// Получаем созданный пост с информацией о пользователе
+				const { data: fullPost, error: fetchError } = await supabaseClient
+					.from('posts')
 					.select(`
 						*,
 						user:users(*)
 					`)
+					.eq('user_id', currentUser.id)
+					.order('created_at', { ascending: false })
+					.limit(1)
 					.single();
 				
-				if (postError) throw postError;
+				if (fetchError) throw fetchError;
 				
 				// Обновляем локальный список постов
-				allPosts.unshift(newPost);
+				allPosts.unshift(fullPost);
 				
 				// Обновляем интерфейс
 				updateUI();
@@ -3991,7 +4000,7 @@
 				.replace(/\{\{followers_count\}\}/g, user.followers_count || 0)
 				.replace(/\{\{following_count\}\}/g, user.following_count || 0)
 				.replace(/\{\{reposts_count\}\}/g, reposts.length)
-				.replace(/\{\{clan\}\}/g, user.clan || '😀');
+				.replace(/\{\{clan\}\}/g, user.clan || '😀');  // Исправлено: используем user.clan
 			
 			// Обработка условных блоков
 			html = html.replace(/\{\{#if ([^}]+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (match, condition, content) => {
@@ -4377,10 +4386,10 @@
 
 		async function updateFollowCounters(userId, isFollow) {
 			try {
-				// Получаем текущее количество подписчиков
+				// Обновляем у пользователя, на которого подписались
 				const { data: user } = await supabaseClient
 					.from('users')
-					.select('*')
+					.select('followers_count')
 					.eq('id', userId)
 					.single();
 				
@@ -4404,7 +4413,7 @@
 				// Обновляем количество подписок у текущего пользователя
 				const { data: current } = await supabaseClient
 					.from('users')
-					.select('*')
+					.select('following_count')
 					.eq('id', currentUser.id)
 					.single();
 				
@@ -4484,7 +4493,7 @@
 							</div>
 							<div class="conversation-last-message">${conv.last_message || 'Нет сообщений'}</div>
 						</div>
-						<div class="conversation-time">${formatTimeAgo(conv.last_message_time)}</div>
+						<div class="conversation-time">${formatTimeAgo(conv.last_message_at)}</div>
 					</div>
 				`;
 			}
@@ -4693,7 +4702,7 @@
 					.from('conversations')
 					.update({
 						last_message: content.length > 50 ? content.substring(0, 50) + '...' : content,
-						last_message_time: new Date().toISOString()
+						last_message_at: new Date().toISOString()
 					})
 					.eq('id', currentConversation.id);
 				
@@ -4722,11 +4731,13 @@
 			}
 			
 			try {
-				// Создаем диалог
+				// Исправленный запрос создания диалога
 				const { data: newConversation, error: convError } = await supabaseClient
 					.from('conversations')
 					.insert([{
-						is_group: false
+						is_group: false,
+						last_message: 'Диалог начат',
+						last_message_at: new Date().toISOString()
 					}])
 					.select()
 					.single();
@@ -4740,6 +4751,15 @@
 						{ conversation_id: newConversation.id, user_id: currentUser.id },
 						{ conversation_id: newConversation.id, user_id: userId }
 					]);
+				
+				// Добавляем диалог в локальный список
+				const otherUser = allUsers.find(u => u.id === userId);
+				if (otherUser) {
+					newConversation.name = otherUser.display_name;
+					newConversation.avatar = otherUser.emoji;
+					newConversation.is_online = otherUser.is_online;
+					conversations.unshift(newConversation);
+				}
 				
 				// Переходим в сообщения и открываем диалог
 				showPage('messages');
@@ -5513,7 +5533,7 @@
 					// Обновляем статус оффлайн
 					supabaseClient
 						.from('users')
-						.update({ is_online: false })
+						.update({ is_online: false, last_seen: new Date().toISOString() })
 						.eq('id', currentUser.id);
 				}
 				
@@ -6034,6 +6054,6 @@
 				return false;
 			}
 		}
-    </script>
+	</script>
 </body>
 </html>
