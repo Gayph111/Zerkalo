@@ -2821,7 +2821,7 @@
     <script>
         // ========== КОНФИГУРАЦИЯ ==========
         const SUPABASE_URL = 'https://kzbznupjamhualdewyxk.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6YnpudXBqYW1odWFsZGV3eXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgzNDY5OTQsImV4cCI6MjA1MzkyMjk5NH0.7Ll6UZ5BnQwJq9JYv2Z8X7Qw3y5X6Z8X7Qw3y5X6Z8';
+        const SUPABASE_KEY = 'sb_publishable_VSXNcvoaf2meTwwR8gr80g_Y_YEhSgd';
         
         // Инициализируем Supabase клиент один раз
         let supabaseClient;
@@ -2933,7 +2933,7 @@
         
         // ========== РАБОТА С SUPABASE ==========
         async function loadInitialData() {
-            if (!supabase) {
+            if (!supabaseClient) {
                 console.warn('Supabase не инициализирован, работаем в демо-режиме');
                 await loadDemoData();
                 return true;
@@ -2941,7 +2941,7 @@
             
             try {
                 // Загружаем пользователей
-                const { data: users, error: usersError } = await supabase
+                const { data: users, error: usersError } = await supabaseClient
                     .from('users')
                     .select('*')
                     .order('created_at', { ascending: false });
@@ -2954,7 +2954,7 @@
                 }
                 
                 // Загружаем посты
-                const { data: posts, error: postsError } = await supabase
+                const { data: posts, error: postsError } = await supabaseClient
                     .from('posts')
                     .select(`
                         *,
@@ -2971,7 +2971,7 @@
                 }
                 
                 // Загружаем группы
-                const { data: groups, error: groupsError } = await supabase
+                const { data: groups, error: groupsError } = await supabaseClient
                     .from('groups')
                     .select('*')
                     .order('created_at', { ascending: false });
@@ -3623,8 +3623,8 @@
                 }
                 
                 // Пытаемся обновить в Supabase, если доступен
-                if (supabase) {
-                    const { error } = await supabase
+                if (supabaseClient) {
+                    const { error } = await supabaseClient
                         .from('posts')
                         .update({ likes: newLikes })
                         .eq('id', postId);
@@ -3718,8 +3718,8 @@
                 }
                 
                 // Пытаемся обновить в Supabase
-                if (supabase) {
-                    const { error } = await supabase
+                if (supabaseClient) {
+                    const { error } = await supabaseClient
                         .from('posts')
                         .update({ 
                             comments_count: post.comments_count
@@ -3819,8 +3819,8 @@
                 renderPosts(allPosts);
                 
                 // Пытаемся обновить в Supabase
-                if (supabase) {
-                    const { error } = await supabase
+                if (supabaseClient) {
+                    const { error } = await supabaseClient
                         .from('posts')
                         .update({ 
                             reposts_count: originalPost.reposts_count 
@@ -3902,8 +3902,8 @@
                 selectedFile = null;
                 selectedVoice = null;
                 
-                // Пытаемся сохранить в Supabase
-                if (supabase) {
+                // Пытаемся сохранить в supabaseClient
+                if (supabaseClient) {
                     const postData = {
                         user_id: currentUser.id,
                         content: newPost.content,
@@ -3918,14 +3918,14 @@
                         reposts_count: 0
                     };
                     
-                    const { error } = await supabase
+                    const { error } = await supabaseClient
                         .from('posts')
                         .insert([postData]);
                     
                     if (error) throw error;
                     
                     // Обновляем пользователя в базе
-                    await supabase
+                    await supabaseClient
                         .from('users')
                         .update({ posts_count: currentUser.posts_count })
                         .eq('id', currentUser.id);
@@ -4179,9 +4179,9 @@
                 }
                 
                 // Пытаемся обновить в Supabase
-                if (supabase) {
+                if (supabaseClient) {
                     // Обновляем текущего пользователя
-                    await supabase
+                    await supabaseClient
                         .from('users')
                         .update({ 
                             following: newFollowing,
@@ -4190,7 +4190,7 @@
                         .eq('id', currentUser.id);
                     
                     // Обновляем другого пользователя
-                    await supabase
+                    await supabaseClient
                         .from('users')
                         .update({ 
                             followers: newFollowers,
@@ -4338,8 +4338,8 @@
                 renderGroups();
                 
                 // Пытаемся обновить в Supabase
-                if (supabase) {
-                    const { error } = await supabase
+                if (supabaseClient) {
+                    const { error } = await supabaseClient
                         .from('groups')
                         .update({ 
                             members: group.members,
@@ -4390,8 +4390,8 @@
                 loadPopularGroups();
                 
                 // Пытаемся сохранить в Supabase
-                if (supabase) {
-                    const { error } = await supabase
+                if (supabaseClient) {
+                    const { error } = await supabaseClient
                         .from('groups')
                         .insert([{
                             name: groupData.name,
@@ -4629,8 +4629,8 @@
                 renderConversations();
                 
                 // Пытаемся сохранить в Supabase
-                if (supabase) {
-                    const { error } = await supabase
+                if (supabaseClient) {
+                    const { error } = await supabaseClient
                         .from('messages')
                         .insert([{
                             conversation_id: currentConversation.id,
@@ -5263,9 +5263,9 @@
                 }
                 
                 // Пытаемся найти пользователя в базе данных
-                if (supabase) {
+                if (supabaseClient) {
                     try {
-                        const { data: user, error } = await supabase
+                        const { data: user, error } = await supabaseClient
                             .from('users')
                             .select('*')
                             .or(`username.eq.${username},email.eq.${username}`)
@@ -5350,8 +5350,8 @@
                     allUsers.push(newUser);
                     
                     // Пытаемся сохранить в Supabase
-                    if (supabase) {
-                        const { error } = await supabase
+                    if (supabaseClient) {
+                        const { error } = await supabaseClient
                             .from('users')
                             .insert([{
                                 username,
@@ -5475,8 +5475,8 @@
                     updateUI();
                     
                     // Пытаемся обновить в Supabase
-                    if (supabase) {
-                        const { error } = await supabase
+                    if (supabaseClient) {
+                        const { error } = await supabaseClient
                             .from('users')
                             .update({
                                 display_name: displayName,
