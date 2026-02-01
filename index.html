@@ -2741,22 +2741,19 @@
 		const SUPABASE_URL = 'https://kzbznupjamhualdewyxk.supabase.co';
 		const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6YnpudXBqYW1odWFsZGV3eXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgzNDY5OTQsImV4cCI6MjA1MzkyMjk5NH0.7Ll6UZ5BnQwJq9JYv2Z8X7Qw3y5X6Z8X7Qw3y5X6Z8';
 		
-		// УБРАЛИ ПОВТОРНОЕ ОБЪЯВЛЕНИЕ supabase - клиент уже создан в HEAD
-		// const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-		
-		// Используем уже созданный клиент из глобальной области
-		// Если клиент еще не создан, создаем его
-		let supabase;
-		try {
-			supabase = window.supabase || window.supabaseClient;
-			if (!supabase) {
-				supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-				window.supabaseClient = supabase;
+		// НЕ СОЗДАЕМ НОВЫЙ КЛИЕНТ - используем уже созданный в глобальной области
+		// Если клиент еще не создан, создаем его с другим именем
+		let supabaseClient;
+		if (!window.supabaseClient && window.supabase) {
+			try {
+				window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+			} catch (error) {
+				console.error('Ошибка создания Supabase клиента:', error);
 			}
-		} catch (error) {
-			console.error('Ошибка инициализации Supabase:', error);
-			showNotification('Ошибка', 'Не удалось подключиться к базе данных', 'error');
 		}
+		
+		// Используем уже существующий клиент
+		const supabase = window.supabaseClient || window.supabase;
 		
 		// ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
 		let currentUser = null;
@@ -2851,6 +2848,7 @@
 		async function loadInitialData() {
 			if (!supabase) {
 				console.error('Supabase не инициализирован');
+				showNotification('Ошибка', 'Не удалось подключиться к базе данных', 'error');
 				return false;
 			}
 			
@@ -2959,16 +2957,27 @@
 			if (!currentUser) return;
 			
 			// Обновляем информацию в шапке
-			document.getElementById('userAvatarEmoji').textContent = currentUser.emoji;
-			document.getElementById('profileEmoji').textContent = currentUser.emoji;
-			document.getElementById('currentUserEmoji').textContent = currentUser.emoji;
-			document.getElementById('profileName').textContent = currentUser.display_name;
-			document.getElementById('profileUsername').textContent = currentUser.username;
-			document.getElementById('profileClan').textContent = `${currentUser.clan} Клан`;
-			document.getElementById('profileBio').textContent = currentUser.description || 'Пользователь пока ничего не написал в описании';
-			document.getElementById('statPosts').textContent = currentUser.posts_count || 0;
-			document.getElementById('statFollowers').textContent = currentUser.followers_count || 0;
-			document.getElementById('statFollowing').textContent = currentUser.following_count || 0;
+			const userAvatarEmoji = document.getElementById('userAvatarEmoji');
+			const profileEmoji = document.getElementById('profileEmoji');
+			const currentUserEmoji = document.getElementById('currentUserEmoji');
+			const profileName = document.getElementById('profileName');
+			const profileUsername = document.getElementById('profileUsername');
+			const profileClan = document.getElementById('profileClan');
+			const profileBio = document.getElementById('profileBio');
+			const statPosts = document.getElementById('statPosts');
+			const statFollowers = document.getElementById('statFollowers');
+			const statFollowing = document.getElementById('statFollowing');
+			
+			if (userAvatarEmoji) userAvatarEmoji.textContent = currentUser.emoji;
+			if (profileEmoji) profileEmoji.textContent = currentUser.emoji;
+			if (currentUserEmoji) currentUserEmoji.textContent = currentUser.emoji;
+			if (profileName) profileName.textContent = currentUser.display_name;
+			if (profileUsername) profileUsername.textContent = currentUser.username;
+			if (profileClan) profileClan.textContent = `${currentUser.clan} Клан`;
+			if (profileBio) profileBio.textContent = currentUser.description || 'Пользователь пока ничего не написал в описании';
+			if (statPosts) statPosts.textContent = currentUser.posts_count || 0;
+			if (statFollowers) statFollowers.textContent = currentUser.followers_count || 0;
+			if (statFollowing) statFollowing.textContent = currentUser.following_count || 0;
 			
 			// Показываем галочку верификации
 			const verifiedBadge = document.getElementById('profileVerifiedBadge');
