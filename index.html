@@ -2742,26 +2742,13 @@
 		const SUPABASE_KEY = 'sb_publishable_VSXNcvoaf2meTwwR8gr80g_Y_YEhSgd';
 
 		// Проверяем, инициализирован ли уже клиент Supabase
+		// Создаем клиент Supabase один раз
 		if (!window.supabaseClient) {
-			// Создаем клиент Supabase только если он еще не создан
-			try {
-				window.supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-			} catch (error) {
-				console.error('Ошибка создания Supabase клиента:', error);
-				// Создаем заглушку для демо-режима
-				window.supabaseClient = {
-					from: () => ({ 
-						select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }),
-						insert: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }),
-						update: () => ({ eq: () => Promise.resolve({ error: null }) }),
-						delete: () => ({ eq: () => Promise.resolve({ error: null }) })
-					})
-				};
-			}
+			window.supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 		}
 
-		// Используем уже созданный клиент
-		const supabase = window.supabaseClient;
+		// Используем переменную с другим именем, чтобы избежать конфликта
+		const supabaseClient = window.supabaseClient;
 		
 		// ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
 		let currentUser = null;
@@ -2854,7 +2841,7 @@
 		
 		// ========== РАБОТА С SUPABASE ==========
 		async function loadInitialData() {
-			if (!supabase) {
+			if (!supabaseClient) {
 				console.error('Supabase не инициализирован');
 				showNotification('Ошибка', 'Не удалось подключиться к базе данных', 'error');
 				return false;
@@ -2862,7 +2849,7 @@
 			
 			try {
 				// Загружаем пользователей
-				const { data: users, error: usersError } = await supabase
+				const { data: users, error: usersError } = await supabaseClient
 					.from('users')
 					.select('*')
 					.order('created_at', { ascending: false });
@@ -2871,7 +2858,7 @@
 				allUsers = users || [];
 				
 				// Загружаем посты
-				const { data: posts, error: postsError } = await supabase
+				const { data: posts, error: postsError } = await supabaseClient
 					.from('posts')
 					.select(`
 						*,
@@ -2885,7 +2872,7 @@
 				allPosts = posts || [];
 				
 				// Загружаем группы
-				const { data: groups, error: groupsError } = await supabase
+				const { data: groups, error: groupsError } = await supabaseClient
 					.from('groups')
 					.select('*')
 					.order('created_at', { ascending: false });
@@ -2908,10 +2895,10 @@
 		}
 		
 		async function loadNotifications() {
-			if (!currentUser || !supabase) return;
+			if (!currentUser || !supabaseClient) return;
 			
 			try {
-				const { data, error } = await supabase
+				const { data, error } = await supabaseClient
 					.from('notifications')
 					.select('*')
 					.eq('user_id', currentUser.id)
@@ -2939,10 +2926,10 @@
 		}
 		
 		async function loadConversations() {
-			if (!currentUser || !supabase) return;
+			if (!currentUser || !supabaseClient) return;
 			
 			try {
-				const { data, error } = await supabase
+				const { data, error } = await supabaseClient
 					.from('conversations')
 					.select('*')
 					.contains('participants', [currentUser.id])
@@ -3295,7 +3282,7 @@
 					newLikes = [...likes, currentUser.id];
 				}
 				
-				const { error } = await supabase
+				const { error } = await supabaseClient
 					.from('posts')
 					.update({ likes: newLikes })
 					.eq('id', postId);
@@ -3373,7 +3360,7 @@
 				};
 				
 				// Обновляем в базе
-				const { error } = await supabase
+				const { error } = await supabaseClient
 					.from('posts')
 					.update({ 
 						comments: [...comments, newComment],
@@ -3469,7 +3456,7 @@
 				const originalPost = allPosts.find(p => p.id === postId);
 				if (!originalPost) return;
 				
-				const { data: newPost, error } = await supabase
+				const { data: newPost, error } = await supabaseClient
 					.from('posts')
 					.insert([{
 						user_id: currentUser.id,
@@ -3486,7 +3473,7 @@
 				if (error) throw error;
 				
 				// Увеличиваем счетчик репостов у оригинального поста
-				await supabase
+				await supabaseClient
 					.from('posts')
 					.update({ 
 						reposts_count: (originalPost.reposts_count || 0) + 1 
@@ -3544,7 +3531,7 @@
 					postData.voice_duration = attachments.voice.duration;
 				}
 				
-				const { data: newPost, error } = await supabase
+				const { data: newPost, error } = await supabaseClient
 					.from('posts')
 					.insert([postData])
 					.select(`
@@ -3557,7 +3544,7 @@
 				
 				// Обновляем счетчик постов у пользователя
 				currentUser.posts_count = (currentUser.posts_count || 0) + 1;
-				await supabase
+				await supabaseClient
 					.from('users')
 					.update({ posts_count: currentUser.posts_count })
 					.eq('id', currentUser.id);
@@ -3593,7 +3580,7 @@
 				let user = allUsers.find(u => u.id === userId);
 				if (!user) {
 					// Если пользователя нет в локальном кэше, загружаем из базы
-					const { data, error } = await supabase
+					const { data, error } = await supabaseClient
 						.from('users')
 						.select('*')
 						.eq('id', userId)
@@ -3606,7 +3593,7 @@
 				}
 				
 				// Загружаем посты пользователя
-				const { data: userPosts, error: postsError } = await supabase
+				const { data: userPosts, error: postsError } = await supabaseClient
 					.from('posts')
 					.select(`
 						*,
@@ -3763,7 +3750,7 @@
 				}
 				
 				// Обновляем в базе
-				const { error } = await supabase
+				const { error } = await supabaseClient
 					.from('users')
 					.update({ following: newFollowing })
 					.eq('id', currentUser.id);
@@ -3783,7 +3770,7 @@
 					newFollowers = [...followers, currentUser.id];
 				}
 				
-				await supabase
+				await supabaseClient
 					.from('users')
 					.update({ 
 						followers: newFollowers,
@@ -3846,7 +3833,7 @@
 			}
 			
 			try {
-				const { data: newGroup, error } = await supabase
+				const { data: newGroup, error } = await supabaseClient
 					.from('groups')
 					.insert([{
 						...groupData,
@@ -3895,7 +3882,7 @@
 				
 				const newMembers = [...members, currentUser.id];
 				
-				const { error } = await supabase
+				const { error } = await supabaseClient
 					.from('groups')
 					.update({ 
 						members: newMembers,
@@ -3939,7 +3926,7 @@
 					const otherUser = allUsers.find(u => u.id === userId);
 					if (!otherUser) return;
 					
-					const { data: newConversation, error } = await supabase
+					const { data: newConversation, error } = await supabaseClient
 						.from('conversations')
 						.insert([{
 							name: otherUser.username,
@@ -3975,7 +3962,7 @@
 				currentConversation = conversation;
 				
 				// Загружаем сообщения
-				const { data: messages, error } = await supabase
+				const { data: messages, error } = await supabaseClient
 					.from('messages')
 					.select('*')
 					.eq('conversation_id', conversationId)
@@ -4051,7 +4038,7 @@
 					messageData.voice_duration = attachments.voice.duration;
 				}
 				
-				const { data: newMessage, error } = await supabase
+				const { data: newMessage, error } = await supabaseClient
 					.from('messages')
 					.insert([messageData])
 					.select()
@@ -4063,7 +4050,7 @@
 				currentMessages.push(newMessage);
 				
 				// Обновляем последнее сообщение в диалоге
-				await supabase
+				await supabaseClient
 					.from('conversations')
 					.update({
 						last_message: content.slice(0, 50) + (content.length > 50 ? '...' : ''),
@@ -4150,7 +4137,7 @@
 		
 		async function verifyUser(userId) {
 			try {
-				const { error } = await supabase
+				const { error } = await supabaseClient
 					.from('users')
 					.update({ is_verified: true })
 					.eq('id', userId);
@@ -4194,7 +4181,7 @@
 						break;
 				}
 				
-				const { error } = await supabase
+				const { error } = await supabaseClient
 					.from('notifications')
 					.insert([{
 						user_id: userId,
@@ -4248,7 +4235,7 @@
 		
 		async function markNotificationAsRead(notificationId) {
 			try {
-				const { error } = await supabase
+				const { error } = await supabaseClient
 					.from('notifications')
 					.update({ is_read: true })
 					.eq('id', notificationId);
@@ -4514,7 +4501,7 @@
 				
 				// Поиск пользователя в базе данных
 				try {
-					const { data: user, error } = await supabase
+					const { data: user, error } = await supabaseClient
 						.from('users')
 						.select('*')
 						.or(`username.eq.${username},email.eq.${username}`)
@@ -4566,7 +4553,7 @@
 				}
 				
 				try {
-					const { data: existingUser, error: checkError } = await supabase
+					const { data: existingUser, error: checkError } = await supabaseClient
 						.from('users')
 						.select('id')
 						.eq('username', username)
@@ -4577,7 +4564,7 @@
 						return;
 					}
 					
-					const { data: newUser, error: insertError } = await supabase
+					const { data: newUser, error: insertError } = await supabaseClient
 						.from('users')
 						.insert([{
 							username,
@@ -4686,7 +4673,7 @@
 				}
 				
 				try {
-					const { error } = await supabase
+					const { error } = await supabaseClient
 						.from('users')
 						.update({
 							display_name: displayName,
