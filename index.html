@@ -527,12 +527,87 @@
             box-shadow: 0 0 0 3px var(--primary-light);
         }
 
-        .post-actions {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 12px;
-        }
+		/* ===== Улучшенный дизайн постов ===== */
+		/* Убираем дублирующиеся элементы */
+		.post-stats,
+		.post-actions-bottom {
+			display: none !important;
+		}
+
+		/* Улучшенные действия поста - только иконки с счетчиками */
+		.post-actions {
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			padding: 8px 20px;
+			border-top: 1px solid var(--border-light);
+			background-color: var(--secondary);
+		}
+
+		.post-actions .action-btn {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 6px;
+			padding: 6px 12px;
+			border-radius: var(--radius);
+			background: none;
+			border: none;
+			color: var(--text-light);
+			cursor: pointer;
+			font-size: 13px;
+			transition: all 0.2s;
+			flex: 1;
+			max-width: 100px;
+		}
+
+		.post-actions .action-btn:hover {
+			background-color: rgba(99, 102, 241, 0.1);
+			color: var(--primary);
+		}
+
+		.post-actions .action-btn.active,
+		.post-actions .action-btn.liked {
+			color: var(--primary);
+		}
+
+		.post-actions .action-btn.liked {
+			color: #f43f5e;
+		}
+
+		.post-actions .action-btn.liked:hover {
+			color: #e11d48;
+		}
+
+		.post-actions .action-btn .fa-heart {
+			color: inherit;
+		}
+
+		.post-actions .action-count {
+			font-weight: 600;
+			font-size: 13px;
+			color: inherit;
+		}
+
+		/* Улучшаем дизайн репост-контента */
+		.repost-content {
+			margin: 12px 0 0;
+			padding: 16px;
+			background-color: var(--secondary);
+			border-radius: var(--radius);
+			border-left: 3px solid var(--primary-light);
+		}
+
+		.repost-content .post-author {
+			margin-bottom: 8px;
+		}
+
+		.repost-content .post-content {
+			padding: 0;
+			font-size: 14px;
+			color: var(--text);
+			line-height: 1.5;
+		}
 
         .post-attachments {
             display: flex;
@@ -631,14 +706,7 @@
             font-size: 13px;
             color: var(--text-light);
         }
-
-        .post-stats {
-            display: flex;
-            gap: 24px;
-            padding: 12px 20px;
-            border-top: 1px solid var(--border);
-            border-bottom: 1px solid var(--border);
-        }
+		
 
         .post-stat {
             display: flex;
@@ -662,12 +730,62 @@
         .post-stat.liked {
             color: var(--error);
         }
+				/* Улучшенные действия поста */
+		.post-actions {
+			display: flex;
+			padding: 8px 20px;
+			border-top: 1px solid var(--border);
+			gap: 4px;
+		}
 
-        .post-actions-bottom {
-            padding: 12px 20px;
-            display: flex;
-            gap: 8px;
-        }
+		.post-actions .action-btn {
+			flex: 1;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 8px;
+			padding: 8px 12px;
+			border-radius: var(--radius);
+			background: none;
+			border: none;
+			color: var(--text-light);
+			cursor: pointer;
+			font-size: 14px;
+			transition: all 0.2s;
+			position: relative;
+		}
+
+		.post-actions .action-btn:hover {
+			background-color: var(--secondary);
+			color: var(--primary);
+		}
+
+		.post-actions .action-btn.active {
+			color: var(--primary);
+		}
+
+		.post-actions .action-btn.liked {
+			color: var(--error);
+		}
+
+		.post-actions .action-count {
+			font-weight: 500;
+			font-size: 13px;
+		}
+
+		.post-actions .action-btn .fa-heart {
+			color: inherit;
+		}
+
+		.post-actions .action-btn:hover .action-count {
+			color: inherit;
+		}
+
+		/* Удаляем старые элементы */
+		.post-stats,
+		.post-actions-bottom {
+			display: none;
+		}
 
         .action-btn {
             flex: 1;
@@ -2509,7 +2627,6 @@
 					<div class="voice-duration">[voiceDuration]</div>
 				</div>
 				[/if_voice_url]
-
 				[if_original_post]
 				<div class="repost-content mt-3">
 					<div class="post-author mb-2">
@@ -2523,6 +2640,9 @@
 								<i class="fas fa-check-circle verified-badge"></i>
 								[/if_original_verified]
 							</div>
+							<div class="post-meta">
+								<span class="post-time">[original_post.timeAgo]</span>
+							</div>
 						</div>
 					</div>
 					<div class="post-content">
@@ -2532,33 +2652,22 @@
 				[/if_original_post]
 			</div>
 
-			<div class="post-stats">
-				<div class="post-stat [liked_class]" data-action="like">
+			<!-- Улучшенные элементы действий - только иконки -->
+			<div class="post-actions">
+				<button class="action-btn like-btn [liked_active]" data-post-id="[id]" title="Нравится">
 					<i class="[like_icon]"></i>
-					<span>[likes_count]</span>
-				</div>
-				<div class="post-stat" data-action="comment">
-					<i class="far fa-comment"></i>
-					<span>[comments_count]</span>
-				</div>
-				<div class="post-stat" data-action="repost">
-					<i class="fas fa-retweet"></i>
-					<span>[reposts_count]</span>
-				</div>
-			</div>
-
-			<div class="post-actions-bottom">
-				<button class="action-btn like-btn [liked_active]" data-post-id="[id]">
-					<i class="[like_icon]"></i>
-					<span>[like_text]</span>
+					<span class="action-count">[likes_count]</span>
 				</button>
-				<button class="action-btn comment-btn" data-post-id="[id]">
+				<button class="action-btn comment-btn" data-post-id="[id]" title="Комментировать">
 					<i class="far fa-comment"></i>
-					<span>Комментировать</span>
+					<span class="action-count">[comments_count]</span>
 				</button>
-				<button class="action-btn repost-btn" data-post-id="[id]">
+				<button class="action-btn repost-btn" data-post-id="[id]" title="Репост">
 					<i class="fas fa-retweet"></i>
-					<span>Репост</span>
+					<span class="action-count">[reposts_count]</span>
+				</button>
+				<button class="action-btn share-btn" data-post-id="[id]" title="Поделиться">
+					<i class="fas fa-share"></i>
 				</button>
 			</div>
 
@@ -3183,17 +3292,32 @@
 		
 		function createPostElement(post) {
 			const template = document.getElementById('postTemplate').innerHTML;
-			const user = post.user || allUsers.find(u => u.id === post.user_id);
+			
+			// Ищем пользователя
+			let user = post.user;
+			if (!user) {
+				user = allUsers.find(u => u.id === post.user_id);
+				// Если пользователь все еще не найден, создаем временного
+				if (!user) {
+					user = {
+						id: post.user_id,
+						username: currentUser?.id === post.user_id ? currentUser.username : 'Неизвестно',
+						emoji: currentUser?.id === post.user_id ? currentUser.emoji : '😀',
+						is_verified: false
+					};
+				}
+			}
+			
 			const isLiked = post.likes?.includes(currentUser?.id) || false;
 			const isImage = post.file_url && /\.(jpg|jpeg|png|gif|webp)$/i.test(post.file_url);
 			
 			// Подготовка данных для замены
 			const data = {
 				'[id]': post.id,
-				'[user.id]': user?.id || '',
-				'[user.username]': user?.username || 'Неизвестно',
-				'[user.emoji]': user?.emoji || '😀',
-				'[status_class]': onlineUsers.has(user?.id) ? 'status-online' : 'status-offline',
+				'[user.id]': user.id,
+				'[user.username]': user.username,
+				'[user.emoji]': user.emoji,
+				'[status_class]': onlineUsers.has(user.id) ? 'status-online' : 'status-offline',
 				'[created_at]': post.created_at,
 				'[timeAgo]': formatTimeAgo(post.created_at),
 				'[content]': post.content || '',
@@ -3202,32 +3326,26 @@
 				'[fileSize]': formatFileSize(post.file_size || 0),
 				'[voiceDuration]': post.voice_duration ? 
 					`${Math.floor(post.voice_duration / 60)}:${(post.voice_duration % 60).toString().padStart(2, '0')}` : '0:00',
-				'[original_post.user.emoji]': post.original_post?.user?.emoji || '😀',
-				'[original_post.user.username]': post.original_post?.user?.username || 'Неизвестно',
+				'[original_post.user.emoji]': post.original_post?.user?.emoji || '',
+				'[original_post.user.username]': post.original_post?.user?.username || '',
 				'[original_post.content]': post.original_post?.content || '',
-				'[liked_class]': isLiked ? 'liked' : '',
+				'[original_post.timeAgo]': post.original_post?.created_at ? formatTimeAgo(post.original_post.created_at) : '',
+				'[liked_active]': isLiked ? 'active liked' : '',
 				'[like_icon]': isLiked ? 'fas fa-heart' : 'far fa-heart',
 				'[likes_count]': post.likes?.length || 0,
 				'[comments_count]': post.comments_count || 0,
-				'[reposts_count]': post.reposts_count || 0,
-				'[liked_active]': isLiked ? 'active' : '',
-				'[like_text]': isLiked ? 'Не нравится' : 'Нравится'
+				'[reposts_count]': post.reposts_count || 0
 			};
 			
 			// Начинаем с шаблона
 			let html = template;
-			
-			// Заменяем все переменные
-			Object.keys(data).forEach(key => {
-				html = html.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), data[key]);
-			});
 			
 			// Обработка условных блоков
 			html = html.replace(/\[if_original_post_id\]([\s\S]*?)\[\/if_original_post_id\]/g, 
 				post.original_post_id ? '$1' : '');
 			
 			html = html.replace(/\[if_verified\]([\s\S]*?)\[\/if_verified\]/g, 
-				user?.is_verified ? '$1' : '');
+				user.is_verified ? '$1' : '');
 			
 			html = html.replace(/\[if_file_url\]([\s\S]*?)\[\/if_file_url\]/g, 
 				post.file_url ? '$1' : '');
@@ -3238,11 +3356,18 @@
 			html = html.replace(/\[if_isImage\]([\s\S]*?)\[else_isImage\]([\s\S]*?)\[\/if_isImage\]/g, 
 				isImage ? '$1' : '$2');
 			
+			// Важное исправление: показываем блок репоста только если есть оригинальный пост с контентом
+			const hasValidOriginalPost = post.original_post && post.original_post.content && post.original_post.user;
 			html = html.replace(/\[if_original_post\]([\s\S]*?)\[\/if_original_post\]/g, 
-				post.original_post ? '$1' : '');
+				hasValidOriginalPost ? '$1' : '');
 			
 			html = html.replace(/\[if_original_verified\]([\s\S]*?)\[\/if_original_verified\]/g, 
 				post.original_post?.user?.is_verified ? '$1' : '');
+			
+			// Заменяем все переменные
+			Object.keys(data).forEach(key => {
+				html = html.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), data[key]);
+			});
 			
 			const div = document.createElement('div');
 			div.innerHTML = html;
@@ -3267,8 +3392,30 @@
 						commentsSection.classList.toggle('hidden');
 						if (!commentsSection.classList.contains('hidden')) {
 							loadComments(postId);
+							// Фокус на поле комментария
+							const commentInput = commentsSection.querySelector('.comment-input');
+							if (commentInput) commentInput.focus();
 						}
 					}
+				});
+			});
+			
+			// Репосты
+			document.querySelectorAll('.repost-btn').forEach(btn => {
+				btn.addEventListener('click', async () => {
+					const postId = btn.dataset.postId;
+					await createRepost(postId);
+				});
+			});
+			
+			// Поделиться
+			document.querySelectorAll('.share-btn').forEach(btn => {
+				btn.addEventListener('click', () => {
+					const postId = btn.dataset.postId;
+					const postUrl = `${window.location.origin}?post=${postId}`;
+					navigator.clipboard.writeText(postUrl).then(() => {
+						showNotification('Успех', 'Ссылка скопирована в буфер обмена', 'success');
+					});
 				});
 			});
 			
@@ -3284,11 +3431,15 @@
 				});
 			});
 			
-			// Репосты
-			document.querySelectorAll('.repost-btn').forEach(btn => {
-				btn.addEventListener('click', async () => {
-					const postId = btn.dataset.postId;
-					await createRepost(postId);
+			// Enter для отправки комментария
+			document.querySelectorAll('.comment-input').forEach(input => {
+				input.addEventListener('keypress', (e) => {
+					if (e.key === 'Enter' && !e.shiftKey) {
+						e.preventDefault();
+						const postId = input.dataset.postId;
+						const btn = document.querySelector(`.send-comment-btn[data-post-id="${postId}"]`);
+						if (btn) btn.click();
+					}
 				});
 			});
 			
@@ -3322,7 +3473,7 @@
 					newLikes = [...likes, currentUser.id];
 				}
 				
-				const { error } = await supabaseClient
+				const { error } = await supabase
 					.from('posts')
 					.update({ likes: newLikes })
 					.eq('id', postId);
@@ -3334,33 +3485,19 @@
 				
 				// Обновляем интерфейс
 				const likeBtn = document.querySelector(`.like-btn[data-post-id="${postId}"]`);
-				const likeStat = document.querySelector(`.post-stat[data-action="like"][data-post-id="${postId}"]`);
-				
 				if (likeBtn) {
 					const icon = likeBtn.querySelector('i');
-					const text = likeBtn.querySelector('span');
+					const count = likeBtn.querySelector('.action-count');
+					
 					if (isLiked) {
 						icon.className = 'far fa-heart';
-						text.textContent = 'Нравится';
-						likeBtn.classList.remove('active');
+						likeBtn.classList.remove('active', 'liked');
 					} else {
 						icon.className = 'fas fa-heart';
-						text.textContent = 'Не нравится';
-						likeBtn.classList.add('active');
+						likeBtn.classList.add('active', 'liked');
 					}
-				}
-				
-				if (likeStat) {
-					const count = likeStat.querySelector('span');
-					const icon = likeStat.querySelector('i');
+					
 					count.textContent = newLikes.length;
-					if (isLiked) {
-						likeStat.classList.remove('liked');
-						icon.className = 'far fa-heart';
-					} else {
-						likeStat.classList.add('liked');
-						icon.className = 'fas fa-heart';
-					}
 				}
 				
 				// Отправляем уведомление
@@ -3556,8 +3693,12 @@
 					likes: [],
 					comments: [],
 					comments_count: 0,
-					reposts_count: 0
+					reposts_count: 0,
+					created_at: new Date().toISOString()
 				};
+				
+				// ВАЖНО: НЕ добавляем original_post_id если это не репост
+				// postData.original_post_id = null; // Не нужно, будет undefined
 				
 				// Добавляем вложения если есть
 				if (attachments.file) {
@@ -3571,7 +3712,7 @@
 					postData.voice_duration = attachments.voice.duration;
 				}
 				
-				const { data: newPost, error } = await supabaseClient
+				const { data: newPost, error } = await supabase
 					.from('posts')
 					.insert([postData])
 					.select(`
@@ -3584,10 +3725,24 @@
 				
 				// Обновляем счетчик постов у пользователя
 				currentUser.posts_count = (currentUser.posts_count || 0) + 1;
-				await supabaseClient
+				await supabase
 					.from('users')
 					.update({ posts_count: currentUser.posts_count })
 					.eq('id', currentUser.id);
+				
+				// Убеждаемся, что post.user заполнен
+				if (!newPost.user) {
+					newPost.user = {
+						id: currentUser.id,
+						username: currentUser.username,
+						emoji: currentUser.emoji,
+						is_verified: currentUser.is_verified
+					};
+				}
+				
+				// ВАЖНО: Убедимся, что у нового поста нет original_post
+				newPost.original_post = null;
+				newPost.original_post_id = null;
 				
 				// Обновляем локально
 				allPosts.unshift(newPost);
