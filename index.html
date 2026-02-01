@@ -3009,7 +3009,7 @@
 					.from('users')
 					.update({
 						is_online: true,
-						last_seen: new Date().toISOString()
+						last_activity: new Date().toISOString()
 					})
 					.eq('id', currentUser.id);
 				
@@ -3017,8 +3017,7 @@
 				const { data: onlineUsersData } = await supabaseClient
 					.from('users')
 					.select('id')
-					.eq('is_online', true)
-					.gt('last_seen', new Date(Date.now() - 5 * 60000).toISOString());
+					.eq('is_online', true);
 				
 				if (onlineUsersData) {
 					onlineUsers = new Set(onlineUsersData.map(u => u.id));
@@ -3211,7 +3210,7 @@
 					.from('users')
 					.select('*')
 					.neq('id', currentUser.id)
-					.order('followers_count', { ascending: false })
+					.order('created_at', { ascending: false })
 					.limit(5);
 				
 				if (error) throw error;
@@ -3530,6 +3529,18 @@
 					}
 				});
 			});
+			
+			// Воспроизведение аудио
+			document.querySelectorAll('.play-audio-btn').forEach(btn => {
+				btn.addEventListener('click', (e) => {
+					e.stopPropagation();
+					const audioUrl = btn.dataset.audioUrl;
+					if (audioUrl) {
+						const audio = new Audio(audioUrl);
+						audio.play();
+					}
+				});
+			});
 		}
 
 		// ========== ВЗАИМОДЕЙСТВИЯ С ПОСТАМИ ==========
@@ -3807,7 +3818,6 @@
 				// Обработка медиа файла
 				if (attachments.media) {
 					const file = attachments.media;
-					const fileName = `post_${Date.now()}_${file.name}`;
 					const fileExt = file.name.split('.').pop().toLowerCase();
 					
 					// Определяем тип медиа
@@ -3820,27 +3830,8 @@
 						mediaType = 'audio';
 					}
 					
-					// В демо-режиме создаем Blob URL
-					if (!supabaseClient.storage) {
-						postData.media_url = URL.createObjectURL(file);
-					} else {
-						// Загружаем файл в Supabase Storage
-						const { data: uploadData, error: uploadError } = await supabaseClient
-							.storage
-							.from('posts')
-							.upload(fileName, file);
-						
-						if (uploadError) throw uploadError;
-						
-						// Получаем публичный URL
-						const { data: { publicUrl } } = supabaseClient
-							.storage
-							.from('posts')
-							.getPublicUrl(fileName);
-						
-						postData.media_url = publicUrl;
-					}
-					
+					// Для демо-режима создаем Blob URL
+					postData.media_url = URL.createObjectURL(file);
 					postData.media_type = mediaType;
 					postData.media_name = file.name;
 					postData.media_size = file.size;
@@ -3848,28 +3839,7 @@
 				
 				// Обработка голосового сообщения
 				if (attachments.voice) {
-					if (!supabaseClient.storage) {
-						postData.voice_url = attachments.voice.url;
-					} else {
-						const voiceBlob = attachments.voice.blob;
-						const voiceName = `voice_${Date.now()}.webm`;
-						
-						// Загружаем голосовое сообщение
-						const { data: voiceUpload, error: voiceError } = await supabaseClient
-							.storage
-							.from('voices')
-							.upload(voiceName, voiceBlob);
-						
-						if (voiceError) throw voiceError;
-						
-						const { data: { publicUrl: voiceUrl } } = supabaseClient
-							.storage
-							.from('voices')
-							.getPublicUrl(voiceName);
-						
-						postData.voice_url = voiceUrl;
-					}
-					
+					postData.voice_url = attachments.voice.url;
 					postData.voice_duration = attachments.voice.duration;
 				}
 				
@@ -3935,19 +3905,20 @@
 					return;
 				}
 				
-				// Загружаем статистику подписчиков/подписок
-				const { data: followersData } = await supabaseClient
+				// Загружаем количество подписчиков
+				const { count: followersCount, error: followersError } = await supabaseClient
 					.from('followers')
-					.select('follower_id')
+					.select('*', { count: 'exact', head: true })
 					.eq('user_id', userId);
 				
-				const { data: followingData } = await supabaseClient
+				// Загружаем количество подписок
+				const { count: followingCount, error: followingError } = await supabaseClient
 					.from('followers')
-					.select('user_id')
+					.select('*', { count: 'exact', head: true })
 					.eq('follower_id', userId);
 				
-				user.followers_count = followersData?.length || 0;
-				user.following_count = followingData?.length || 0;
+				user.followers_count = followersCount || 0;
+				user.following_count = followingCount || 0;
 				
 				// Проверяем, подписан ли текущий пользователь
 				let isFollowing = false;
@@ -3970,6 +3941,7 @@
 						user:users(*)
 					`)
 					.eq('user_id', userId)
+					.is('is_repost', false)
 					.order('created_at', { ascending: false });
 				
 				// Загружаем репосты пользователя
@@ -4140,22 +4112,21 @@
 					return;
 				}
 				
-				container.innerHTML = mediaPosts.map(post => {
+				container.innerHTML = '';
+				for (const post of mediaPosts) {
 					if (post.media_type === 'image') {
-						return `<img src="${post.media_url}" class="media-item" data-post-id="${post.id}">`;
-					} else if (post.media_type === 'video') {
-						return `<video class="media-item" data-post-id="${post.id}"><source src="${post.media_url}"></video>`;
+						const img = document.createElement('img');
+						img.src = post.media_url;
+						img.className = 'media-item';
+						img.dataset.postId = post.id;
+						img.style.cssText = 'width: 100px; height: 100px; object-fit: cover; border-radius: 8px; cursor: pointer;';
+						img.addEventListener('click', () => {
+							// Можно реализовать просмотр медиа в полном размере
+							window.open(post.media_url, '_blank');
+						});
+						container.appendChild(img);
 					}
-					return '';
-				}).join('');
-				
-				// Добавляем обработчики кликов на медиа
-				container.querySelectorAll('.media-item').forEach(item => {
-					item.addEventListener('click', () => {
-						const postId = item.dataset.postId;
-						// Можно реализовать просмотр медиа в полном размере
-					});
-				});
+				}
 				
 			} catch (error) {
 				console.error('Ошибка загрузки медиа:', error);
@@ -4406,266 +4377,58 @@
 
 		async function updateFollowCounters(userId, isFollow) {
 			try {
-				// Обновляем счетчики у пользователя, на которого подписались
+				// Получаем текущее количество подписчиков
 				const { data: user } = await supabaseClient
 					.from('users')
-					.select('followers_count')
+					.select('*')
 					.eq('id', userId)
 					.single();
 				
 				if (user) {
+					const newFollowersCount = isFollow ? (user.followers_count || 0) + 1 : Math.max((user.followers_count || 0) - 1, 0);
+					
 					await supabaseClient
 						.from('users')
 						.update({
-							followers_count: isFollow ? (user.followers_count || 0) + 1 : Math.max((user.followers_count || 0) - 1, 0)
+							followers_count: newFollowersCount
 						})
 						.eq('id', userId);
+					
+					// Обновляем у пользователя, на которого подписались
+					const followersCountEl = document.getElementById('followersCount');
+					if (followersCountEl) {
+						followersCountEl.textContent = newFollowersCount;
+					}
 				}
 				
-				// Обновляем счетчики у текущего пользователя
+				// Обновляем количество подписок у текущего пользователя
 				const { data: current } = await supabaseClient
 					.from('users')
-					.select('following_count')
+					.select('*')
 					.eq('id', currentUser.id)
 					.single();
 				
 				if (current) {
+					const newFollowingCount = isFollow ? (current.following_count || 0) + 1 : Math.max((current.following_count || 0) - 1, 0);
+					
 					await supabaseClient
 						.from('users')
 						.update({
-							following_count: isFollow ? (current.following_count || 0) + 1 : Math.max((current.following_count || 0) - 1, 0)
+							following_count: newFollowingCount
 						})
 						.eq('id', currentUser.id);
-				}
-				
-				// Обновляем интерфейс
-				const followersCount = document.getElementById('followersCount');
-				const followingCount = document.getElementById('followingCount');
-				
-				if (followersCount) {
-					const currentCount = parseInt(followersCount.textContent) || 0;
-					followersCount.textContent = isFollow ? currentCount + 1 : Math.max(currentCount - 1, 0);
+					
+					// Обновляем у текущего пользователя
+					currentUser.following_count = newFollowingCount;
+					
+					const followingCountEl = document.getElementById('followingCount');
+					if (followingCountEl) {
+						followingCountEl.textContent = newFollowingCount;
+					}
 				}
 				
 			} catch (error) {
 				console.error('Ошибка обновления счетчиков:', error);
-			}
-		}
-
-		// ========== УПРАВЛЕНИЕ ГРУППАМИ ==========
-		async function renderGroups() {
-			const allGrid = document.getElementById('allGroupsGrid');
-			const myGrid = document.getElementById('myGroupsGrid');
-			const channelsGrid = document.getElementById('channelsGrid');
-			const communitiesGrid = document.getElementById('communitiesGrid');
-			
-			if (!allGrid || !myGrid || !channelsGrid || !communitiesGrid) return;
-			
-			// Очищаем все сетки
-			allGrid.innerHTML = '';
-			myGrid.innerHTML = '';
-			channelsGrid.innerHTML = '';
-			communitiesGrid.innerHTML = '';
-			
-			// Определяем, в каких группах состоит пользователь
-			let userGroups = [];
-			if (currentUser && supabaseClient) {
-				const { data: memberships } = await supabaseClient
-					.from('group_members')
-					.select('group_id')
-					.eq('user_id', currentUser.id);
-				
-				if (memberships) {
-					userGroups = memberships.map(m => m.group_id);
-				}
-			}
-			
-			// Обновляем счетчик моих групп
-			const myGroupsCount = document.getElementById('myGroupsCount');
-			if (myGroupsCount) {
-				myGroupsCount.textContent = userGroups.length;
-			}
-			
-			// Рендерим группы
-			for (const group of allGroups) {
-				const isMember = userGroups.includes(group.id);
-				
-				// Рендерим во все группы
-				renderGroupCard(group, allGrid, isMember);
-				
-				// Рендерим в мои группы если пользователь участник
-				if (isMember) {
-					renderGroupCard(group, myGrid, true);
-				}
-				
-				// Рендерим по типам
-				if (group.type === 'channel') {
-					renderGroupCard(group, channelsGrid, isMember);
-				} else if (group.type === 'community') {
-					renderGroupCard(group, communitiesGrid, isMember);
-				}
-			}
-			
-			// Добавляем обработчики
-			addGroupEventListeners();
-		}
-
-		function renderGroupCard(group, container, isMember) {
-			const template = document.getElementById('groupCardTemplate').innerHTML;
-			
-			let html = template
-				.replace(/\{\{id\}\}/g, group.id)
-				.replace(/\{\{name\}\}/g, group.name)
-				.replace(/\{\{avatar\}\}/g, group.avatar || '👥')
-				.replace(/\{\{description\}\}/g, group.description || 'Нет описания')
-				.replace(/\{\{members_count\}\}/g, group.members_count || 0)
-				.replace(/\{\{posts_count\}\}/g, group.posts_count || 0)
-				.replace(/\{\{is_member\}\}/g, isMember ? 'true' : '');
-			
-			// Обработка условных блоков
-			html = html.replace(/\{\{#if is_member\}\}([\s\S]*?)\{\{\/if\}\}/g, (match, content) => {
-				return isMember ? content : '';
-			});
-			
-			html = html.replace(/\{\{[^}]+\}\}/g, '');
-			
-			const div = document.createElement('div');
-			div.innerHTML = html;
-			container.appendChild(div.firstElementChild);
-		}
-
-		function addGroupEventListeners() {
-			// Кнопки вступления в группы
-			document.querySelectorAll('.join-group-btn').forEach(btn => {
-				btn.addEventListener('click', async (e) => {
-					e.stopPropagation();
-					const groupId = btn.dataset.groupId;
-					await joinGroup(groupId);
-				});
-			});
-			
-			// Клики по карточкам групп
-			document.querySelectorAll('.group-card').forEach(card => {
-				card.addEventListener('click', (e) => {
-					if (!e.target.classList.contains('join-group-btn')) {
-						const groupId = card.dataset.groupId;
-						showGroupInfo(groupId);
-					}
-				});
-			});
-		}
-
-		async function joinGroup(groupId) {
-			if (!currentUser || !supabaseClient) {
-				showNotification('Ошибка', 'Войдите в систему', 'error');
-				return false;
-			}
-			
-			try {
-				const { data: group, error: groupError } = await supabaseClient
-					.from('groups')
-					.select('*')
-					.eq('id', groupId)
-					.single();
-				
-				if (groupError) throw groupError;
-				
-				// Проверяем, состоит ли уже пользователь в группе
-				const { data: existingMembership } = await supabaseClient
-					.from('group_members')
-					.select('id')
-					.eq('group_id', groupId)
-					.eq('user_id', currentUser.id)
-					.single();
-				
-				if (existingMembership) {
-					showNotification('Информация', 'Вы уже в группе', 'info');
-					return false;
-				}
-				
-				// Добавляем пользователя в группу
-				const { error: joinError } = await supabaseClient
-					.from('group_members')
-					.insert([{
-						group_id: groupId,
-						user_id: currentUser.id,
-						role: 'member'
-					}]);
-				
-				if (joinError) throw joinError;
-				
-				// Обновляем счетчик участников
-				await supabaseClient
-					.from('groups')
-					.update({
-						members_count: (group.members_count || 0) + 1
-					})
-					.eq('id', groupId);
-				
-				// Обновляем интерфейс
-				await renderGroups();
-				await loadPopularGroups();
-				
-				showNotification('Успех', 'Вы вступили в группу!', 'success');
-				return true;
-				
-			} catch (error) {
-				console.error('Ошибка вступления в группу:', error);
-				showNotification('Ошибка', 'Не удалось вступить в группу', 'error');
-				return false;
-			}
-		}
-
-		async function createGroup(groupData) {
-			if (!currentUser || !supabaseClient) {
-				showNotification('Ошибка', 'Войдите в систему', 'error');
-				return false;
-			}
-			
-			try {
-				// Создаем группу
-				const { data: newGroup, error: groupError } = await supabaseClient
-					.from('groups')
-					.insert([{
-						name: groupData.name,
-						username: groupData.username,
-						description: groupData.description,
-						avatar: groupData.avatar,
-						type: groupData.type || 'group',
-						is_public: groupData.privacy === 'public',
-						creator_id: currentUser.id,
-						members_count: 1
-					}])
-					.select()
-					.single();
-				
-				if (groupError) throw groupError;
-				
-				// Добавляем создателя в участники
-				const { error: memberError } = await supabaseClient
-					.from('group_members')
-					.insert([{
-						group_id: newGroup.id,
-						user_id: currentUser.id,
-						role: 'admin'
-					}]);
-				
-				if (memberError) throw memberError;
-				
-				// Обновляем локальный список групп
-				allGroups.unshift(newGroup);
-				
-				// Обновляем интерфейс
-				await renderGroups();
-				await loadPopularGroups();
-				
-				showNotification('Успех', 'Группа создана!', 'success');
-				return true;
-				
-			} catch (error) {
-				console.error('Ошибка создания группы:', error);
-				showNotification('Ошибка', 'Не удалось создать группу', 'error');
-				return false;
 			}
 		}
 
@@ -4721,7 +4484,7 @@
 							</div>
 							<div class="conversation-last-message">${conv.last_message || 'Нет сообщений'}</div>
 						</div>
-						<div class="conversation-time">${formatTimeAgo(conv.last_message_at)}</div>
+						<div class="conversation-time">${formatTimeAgo(conv.last_message_time)}</div>
 					</div>
 				`;
 			}
@@ -4930,7 +4693,7 @@
 					.from('conversations')
 					.update({
 						last_message: content.length > 50 ? content.substring(0, 50) + '...' : content,
-						last_message_at: new Date().toISOString()
+						last_message_time: new Date().toISOString()
 					})
 					.eq('id', currentConversation.id);
 				
@@ -4959,60 +4722,28 @@
 			}
 			
 			try {
-				// Ищем существующий диалог между пользователями
-				const { data: existingConversations, error } = await supabaseClient
+				// Создаем диалог
+				const { data: newConversation, error: convError } = await supabaseClient
+					.from('conversations')
+					.insert([{
+						is_group: false
+					}])
+					.select()
+					.single();
+				
+				if (convError) throw convError;
+				
+				// Добавляем участников
+				await supabaseClient
 					.from('conversation_participants')
-					.select('conversation_id')
-					.eq('user_id', currentUser.id);
-				
-				if (error) throw error;
-				
-				let existingConversationId = null;
-				
-				// Проверяем каждый диалог на наличие второго участника
-				for (const conv of existingConversations) {
-					const { data: participants } = await supabaseClient
-						.from('conversation_participants')
-						.select('user_id')
-						.eq('conversation_id', conv.conversation_id)
-						.eq('user_id', userId)
-						.single();
-					
-					if (participants) {
-						existingConversationId = conv.conversation_id;
-						break;
-					}
-				}
-				
-				let conversationId = existingConversationId;
-				
-				// Если диалога нет, создаем новый
-				if (!conversationId) {
-					// Создаем диалог
-					const { data: newConversation, error: convError } = await supabaseClient
-						.from('conversations')
-						.insert([{
-							is_group: false
-						}])
-						.select()
-						.single();
-					
-					if (convError) throw convError;
-					
-					conversationId = newConversation.id;
-					
-					// Добавляем участников
-					await supabaseClient
-						.from('conversation_participants')
-						.insert([
-							{ conversation_id: conversationId, user_id: currentUser.id },
-							{ conversation_id: conversationId, user_id: userId }
-						]);
-				}
+					.insert([
+						{ conversation_id: newConversation.id, user_id: currentUser.id },
+						{ conversation_id: newConversation.id, user_id: userId }
+					]);
 				
 				// Переходим в сообщения и открываем диалог
 				showPage('messages');
-				await openConversation(conversationId);
+				await openConversation(newConversation.id);
 				
 			} catch (error) {
 				console.error('Ошибка создания диалога:', error);
@@ -5181,6 +4912,13 @@
 				} else if (isImage) {
 					const imageUrl = URL.createObjectURL(selectedFile);
 					previewHTML = `<img src="${imageUrl}" class="w-100 rounded" style="max-height: 200px; object-fit: cover;">`;
+				} else if (isVideo) {
+					const videoUrl = URL.createObjectURL(selectedFile);
+					previewHTML = `
+						<video controls class="w-100 rounded" style="max-height: 200px;">
+							<source src="${videoUrl}" type="video/mp4">
+						</video>
+					`;
 				} else {
 					previewHTML = `
 						<div class="d-flex align-center justify-between">
@@ -5566,7 +5304,7 @@
 						description: bio,
 						status: status,
 						emoji: emoji,
-						clan: emoji,
+						clan: emoji,  // Обновляем клан
 						updated_at: new Date().toISOString()
 					})
 					.eq('id', currentUser.id);
@@ -5578,7 +5316,7 @@
 				currentUser.description = bio;
 				currentUser.status = status;
 				currentUser.emoji = emoji;
-				currentUser.clan = emoji;
+				currentUser.clan = emoji;  // Обновляем клан локально
 				
 				// Сохраняем в localStorage
 				localStorage.setItem('mirror_user', JSON.stringify(currentUser));
@@ -5717,7 +5455,7 @@
 							description: description || null,
 							emoji,
 							password_hash: password,
-							clan: emoji
+							clan: emoji  // Сохраняем клан при регистрации
 						}])
 						.select()
 						.single();
@@ -6032,19 +5770,30 @@
 			}, 30000);
 		});
 
-		// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (оставшиеся) ==========
+		// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 		async function showGroupInfo(groupId) {
-			// Функция для показа информации о группе
-			showNotification('Информация', 'Просмотр группы в разработке', 'info');
+			try {
+				const { data: group, error } = await supabaseClient
+					.from('groups')
+					.select('*')
+					.eq('id', groupId)
+					.single();
+				
+				if (error) throw error;
+				
+				showNotification('Информация', `Группа: ${group.name}`, 'info');
+				
+			} catch (error) {
+				console.error('Ошибка загрузки группы:', error);
+				showNotification('Ошибка', 'Не удалось загрузить информацию о группе', 'error');
+			}
 		}
 
 		function showReportModal(userId) {
-			// Функция для показа модалки жалобы
 			showNotification('Информация', 'Система жалоб в разработке', 'info');
 		}
 
 		async function loadAdminPanel() {
-			// Функция для загрузки админ панели
 			if (!currentUser || currentUser.username !== '@onegin') {
 				showNotification('Ошибка', 'Доступ запрещен', 'error');
 				showPage('feed');
@@ -6066,6 +5815,223 @@
 			} catch (error) {
 				console.error('Ошибка загрузки админ панели:', error);
 				showNotification('Ошибка', 'Не удалось загрузить админ панель', 'error');
+			}
+		}
+
+		// ========== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ГРУППАМИ ==========
+		async function renderGroups() {
+			const allGrid = document.getElementById('allGroupsGrid');
+			const myGrid = document.getElementById('myGroupsGrid');
+			const channelsGrid = document.getElementById('channelsGrid');
+			const communitiesGrid = document.getElementById('communitiesGrid');
+			
+			if (!allGrid || !myGrid || !channelsGrid || !communitiesGrid) return;
+			
+			// Очищаем все сетки
+			allGrid.innerHTML = '';
+			myGrid.innerHTML = '';
+			channelsGrid.innerHTML = '';
+			communitiesGrid.innerHTML = '';
+			
+			// Определяем, в каких группах состоит пользователь
+			let userGroups = [];
+			if (currentUser && supabaseClient) {
+				const { data: memberships } = await supabaseClient
+					.from('group_members')
+					.select('group_id')
+					.eq('user_id', currentUser.id);
+				
+				if (memberships) {
+					userGroups = memberships.map(m => m.group_id);
+				}
+			}
+			
+			// Обновляем счетчик моих групп
+			const myGroupsCount = document.getElementById('myGroupsCount');
+			if (myGroupsCount) {
+				myGroupsCount.textContent = userGroups.length;
+			}
+			
+			// Рендерим группы
+			for (const group of allGroups) {
+				const isMember = userGroups.includes(group.id);
+				
+				// Рендерим во все группы
+				renderGroupCard(group, allGrid, isMember);
+				
+				// Рендерим в мои группы если пользователь участник
+				if (isMember) {
+					renderGroupCard(group, myGrid, true);
+				}
+				
+				// Рендерим по типам
+				if (group.type === 'channel') {
+					renderGroupCard(group, channelsGrid, isMember);
+				} else if (group.type === 'community') {
+					renderGroupCard(group, communitiesGrid, isMember);
+				}
+			}
+			
+			// Добавляем обработчики
+			addGroupEventListeners();
+		}
+
+		function renderGroupCard(group, container, isMember) {
+			const template = document.getElementById('groupCardTemplate').innerHTML;
+			
+			let html = template
+				.replace(/\{\{id\}\}/g, group.id)
+				.replace(/\{\{name\}\}/g, group.name)
+				.replace(/\{\{avatar\}\}/g, group.avatar || '👥')
+				.replace(/\{\{description\}\}/g, group.description || 'Нет описания')
+				.replace(/\{\{members_count\}\}/g, group.members_count || 0)
+				.replace(/\{\{posts_count\}\}/g, group.posts_count || 0)
+				.replace(/\{\{is_member\}\}/g, isMember ? 'true' : '');
+			
+			// Обработка условных блоков
+			html = html.replace(/\{\{#if is_member\}\}([\s\S]*?)\{\{\/if\}\}/g, (match, content) => {
+				return isMember ? content : '';
+			});
+			
+			html = html.replace(/\{\{[^}]+\}\}/g, '');
+			
+			const div = document.createElement('div');
+			div.innerHTML = html;
+			container.appendChild(div.firstElementChild);
+		}
+
+		function addGroupEventListeners() {
+			// Кнопки вступления в группы
+			document.querySelectorAll('.join-group-btn').forEach(btn => {
+				btn.addEventListener('click', async (e) => {
+					e.stopPropagation();
+					const groupId = btn.dataset.groupId;
+					await joinGroup(groupId);
+				});
+			});
+			
+			// Клики по карточкам групп
+			document.querySelectorAll('.group-card').forEach(card => {
+				card.addEventListener('click', (e) => {
+					if (!e.target.classList.contains('join-group-btn')) {
+						const groupId = card.dataset.groupId;
+						showGroupInfo(groupId);
+					}
+				});
+			});
+		}
+
+		async function joinGroup(groupId) {
+			if (!currentUser || !supabaseClient) {
+				showNotification('Ошибка', 'Войдите в систему', 'error');
+				return false;
+			}
+			
+			try {
+				const { data: group, error: groupError } = await supabaseClient
+					.from('groups')
+					.select('*')
+					.eq('id', groupId)
+					.single();
+				
+				if (groupError) throw groupError;
+				
+				// Проверяем, состоит ли уже пользователь в группе
+				const { data: existingMembership } = await supabaseClient
+					.from('group_members')
+					.select('id')
+					.eq('group_id', groupId)
+					.eq('user_id', currentUser.id)
+					.single();
+				
+				if (existingMembership) {
+					showNotification('Информация', 'Вы уже в группе', 'info');
+					return false;
+				}
+				
+				// Добавляем пользователя в группу
+				const { error: joinError } = await supabaseClient
+					.from('group_members')
+					.insert([{
+						group_id: groupId,
+						user_id: currentUser.id,
+						role: 'member'
+					}]);
+				
+				if (joinError) throw joinError;
+				
+				// Обновляем счетчик участников
+				await supabaseClient
+					.from('groups')
+					.update({
+						members_count: (group.members_count || 0) + 1
+					})
+					.eq('id', groupId);
+				
+				// Обновляем интерфейс
+				await renderGroups();
+				await loadPopularGroups();
+				
+				showNotification('Успех', 'Вы вступили в группу!', 'success');
+				return true;
+				
+			} catch (error) {
+				console.error('Ошибка вступления в группу:', error);
+				showNotification('Ошибка', 'Не удалось вступить в группу', 'error');
+				return false;
+			}
+		}
+
+		async function createGroup(groupData) {
+			if (!currentUser || !supabaseClient) {
+				showNotification('Ошибка', 'Войдите в систему', 'error');
+				return false;
+			}
+			
+			try {
+				// Создаем группу
+				const { data: newGroup, error: groupError } = await supabaseClient
+					.from('groups')
+					.insert([{
+						name: groupData.name,
+						username: groupData.username,
+						description: groupData.description,
+						avatar: groupData.avatar,
+						type: groupData.type || 'group',
+						is_public: groupData.privacy === 'public',
+						creator_id: currentUser.id,
+						members_count: 1
+					}])
+					.select()
+					.single();
+				
+				if (groupError) throw groupError;
+				
+				// Добавляем создателя в участники
+				const { error: memberError } = await supabaseClient
+					.from('group_members')
+					.insert([{
+						group_id: newGroup.id,
+						user_id: currentUser.id,
+						role: 'admin'
+					}]);
+				
+				if (memberError) throw memberError;
+				
+				// Обновляем локальный список групп
+				allGroups.unshift(newGroup);
+				
+				// Обновляем интерфейс
+				await renderGroups();
+				await loadPopularGroups();
+				
+				showNotification('Успех', 'Группа создана!', 'success');
+				return true;
+				
+			} catch (error) {
+				console.error('Ошибка создания группы:', error);
+				showNotification('Ошибка', 'Не удалось создать группу', 'error');
+				return false;
 			}
 		}
     </script>
