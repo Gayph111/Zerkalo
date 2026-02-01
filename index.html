@@ -2823,17 +2823,13 @@
         const SUPABASE_URL = 'https://kzbznupjamhualdewyxk.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_VSXNcvoaf2meTwwR8gr80g_Y_YEhSgd';
         
-        // Инициализируем Supabase клиент один раз
-        let supabaseClient;
-        try {
-            if (window.supabase) {
-                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-            }
-        } catch (error) {
-            console.error('Ошибка создания Supabase клиента:', error);
-        }
-        
-        const supabase = supabaseClient;
+		// Создаем клиент Supabase один раз
+		if (!window.supabaseClient) {
+			window.supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+		}
+
+		// Используем переменную с другим именем, чтобы избежать конфликта
+		const supabaseClient = window.supabaseClient;
         
         // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
         let currentUser = null;
