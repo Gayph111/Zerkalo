@@ -2445,60 +2445,60 @@
 
     <!-- Вложенные компоненты -->
 	<script type="text/template" id="postTemplate">
-		<div class="card post" data-post-id="{{id}}">
-			{{#if original_post_id}}
+		<div class="card post" data-post-id="[id]">
+			[if_original_post_id]
 			<div class="repost-header">
 				<i class="fas fa-retweet"></i>
-				<span>{{user.username}} репостнул(а)</span>
+				<span>[user.username] репостнул(а)</span>
 			</div>
-			{{/if}}
+			[/if_original_post_id]
 			
 			<div class="post-header">
 				<div class="post-author">
-					<div class="user-avatar cursor-pointer view-profile" data-user-id="{{user.id}}">
-						<span>{{user.emoji}}</span>
-						<div class="status-indicator {{#if user.is_online}}status-online{{else}}status-offline{{/if}}"></div>
+					<div class="user-avatar cursor-pointer view-profile" data-user-id="[user.id]">
+						<span>[user.emoji]</span>
+						<div class="status-indicator [status_class]"></div>
 					</div>
 					<div class="post-author-info">
 						<div class="post-author-name">
-							<span class="view-profile cursor-pointer" data-user-id="{{user.id}}">{{user.username}}</span>
-							{{#if user.is_verified}}
+							<span class="view-profile cursor-pointer" data-user-id="[user.id]">[user.username]</span>
+							[if_verified]
 							<i class="fas fa-check-circle verified-badge"></i>
-							{{/if}}
+							[/if_verified]
 						</div>
 						<div class="post-meta">
-							<span class="post-time" title="{{created_at}}">{{timeAgo}}</span>
-							{{#if file_url}}
+							<span class="post-time" title="[created_at]">[timeAgo]</span>
+							[if_file_url]
 							<i class="fas fa-paperclip"></i>
-							{{/if}}
-							{{#if voice_url}}
+							[/if_file_url]
+							[if_voice_url]
 							<i class="fas fa-microphone"></i>
-							{{/if}}
+							[/if_voice_url]
 						</div>
 					</div>
 				</div>
-				<button class="btn-icon post-menu-btn" data-post-id="{{id}}">
+				<button class="btn-icon post-menu-btn" data-post-id="[id]">
 					<i class="fas fa-ellipsis-h"></i>
 				</button>
 			</div>
 
 			<div class="post-content">
-				{{content}}
+				[content]
 				
-				{{#if file_url}}
+				[if_file_url]
 				<div class="post-attachment mt-3">
-					{{#if isImage}}
-					<img src="{{file_url}}" alt="{{file_name}}" loading="lazy">
-					{{else}}
+					[if_isImage]
+					<img src="[file_url]" alt="[file_name]" loading="lazy">
+					[else_isImage]
 					<div class="attachment-info">
 						<i class="fas fa-file"></i>
-						<span>{{file_name}} ({{fileSize}})</span>
+						<span>[file_name] ([fileSize])</span>
 					</div>
-					{{/if}}
+					[/if_isImage]
 				</div>
-				{{/if}}
+				[/if_file_url]
 
-				{{#if voice_url}}
+				[if_voice_url]
 				<div class="voice-message mt-3">
 					<button class="voice-play-btn">
 						<i class="fas fa-play"></i>
@@ -2506,69 +2506,69 @@
 					<div class="voice-waveform">
 						<div class="voice-wave"></div>
 					</div>
-					<div class="voice-duration">{{voiceDuration}}</div>
+					<div class="voice-duration">[voiceDuration]</div>
 				</div>
-				{{/if}}
+				[/if_voice_url]
 
-				{{#if original_post}}
+				[if_original_post]
 				<div class="repost-content mt-3">
 					<div class="post-author mb-2">
 						<div class="user-avatar">
-							<span>{{original_post.user.emoji}}</span>
+							<span>[original_post.user.emoji]</span>
 						</div>
 						<div class="post-author-info">
 							<div class="post-author-name">
-								{{original_post.user.username}}
-								{{#if original_post.user.is_verified}}
+								[original_post.user.username]
+								[if_original_verified]
 								<i class="fas fa-check-circle verified-badge"></i>
-								{{/if}}
+								[/if_original_verified]
 							</div>
 						</div>
 					</div>
 					<div class="post-content">
-						{{original_post.content}}
+						[original_post.content]
 					</div>
 				</div>
-				{{/if}}
+				[/if_original_post]
 			</div>
 
 			<div class="post-stats">
-				<div class="post-stat {{#if liked}}liked{{/if}}" data-action="like">
-					<i class="{{#if liked}}fas{{else}}far{{/if}} fa-heart"></i>
-					<span>{{likes_count}}</span>
+				<div class="post-stat [liked_class]" data-action="like">
+					<i class="[like_icon]"></i>
+					<span>[likes_count]</span>
 				</div>
 				<div class="post-stat" data-action="comment">
 					<i class="far fa-comment"></i>
-					<span>{{comments_count}}</span>
+					<span>[comments_count]</span>
 				</div>
 				<div class="post-stat" data-action="repost">
 					<i class="fas fa-retweet"></i>
-						<span>{{reposts_count}}</span>
+					<span>[reposts_count]</span>
 				</div>
 			</div>
 
 			<div class="post-actions-bottom">
-				<button class="action-btn like-btn {{#if liked}}active{{/if}}" data-post-id="{{id}}">
-					<i class="{{#if liked}}fas{{else}}far{{/if}} fa-heart"></i>
-					<span>Нравится</span>
+				<button class="action-btn like-btn [liked_active]" data-post-id="[id]">
+					<i class="[like_icon]"></i>
+					<span>[like_text]</span>
 				</button>
-				<button class="action-btn comment-btn" data-post-id="{{id}}">
+				<button class="action-btn comment-btn" data-post-id="[id]">
 					<i class="far fa-comment"></i>
 					<span>Комментировать</span>
 				</button>
-				<button class="action-btn repost-btn" data-post-id="{{id}}">
+				<button class="action-btn repost-btn" data-post-id="[id]">
 					<i class="fas fa-retweet"></i>
 					<span>Репост</span>
 				</button>
 			</div>
 
-			<div class="comments-section hidden" id="comments-{{id}}">
-				<div class="comments-list" id="comments-list-{{id}}">
+			<div class="comments-section hidden" id="comments-[id]">
+				<div class="comments-list" id="comments-list-[id]">
 					<!-- Комментарии будут загружены динамически -->
 				</div>
 				<div class="add-comment">
-					<textarea class="comment-input" placeholder="Написать комментарий..." data-post-id="{{id}}"></textarea>
-					<button class="btn btn-primary send-comment-btn" data-post-id="{{id}}">
+					<textarea class="comment-input" placeholder="Написать комментарий..." data-post-id="[id]"></textarea>
+					<button class="btn btn-primary send-comment-btn" data-post-id="[id]">
 						<i class="fas fa-paper-plane"></i>
 					</button>
 				</div>
@@ -3167,8 +3167,14 @@
 			
 			// Рендерим посты
 			posts.forEach(post => {
-				const postElement = createPostElement(post);
-				container.appendChild(postElement);
+				try {
+					const postElement = createPostElement(post);
+					if (postElement) {
+						container.appendChild(postElement);
+					}
+				} catch (error) {
+					console.error('Ошибка рендеринга поста:', error, post);
+				}
 			});
 			
 			// Добавляем обработчики событий
@@ -3181,28 +3187,62 @@
 			const isLiked = post.likes?.includes(currentUser?.id) || false;
 			const isImage = post.file_url && /\.(jpg|jpeg|png|gif|webp)$/i.test(post.file_url);
 			
-			const html = template
-				.replace(/\{\{id\}\}/g, post.id)
-				.replace(/\{\{original_post_id\}\}/g, post.original_post_id || '')
-				.replace(/\{\{user\.username\}\}/g, user?.username || 'Неизвестно')
-				.replace(/\{\{user\.id\}\}/g, user?.id || '')
-				.replace(/\{\{user\.emoji\}\}/g, user?.emoji || '😀')
-				.replace(/\{\{user\.is_online\}\}/g, onlineUsers.has(user?.id) ? 'true' : '')
-				.replace(/\{\{user\.is_verified\}\}/g, user?.is_verified ? 'true' : '')
-				.replace(/\{\{created_at\}\}/g, post.created_at)
-				.replace(/\{\{timeAgo\}\}/g, formatTimeAgo(post.created_at))
-				.replace(/\{\{content\}\}/g, post.content || '')
-				.replace(/\{\{file_url\}\}/g, post.file_url || '')
-				.replace(/\{\{file_name\}\}/g, post.file_name || '')
-				.replace(/\{\{fileSize\}\}/g, formatFileSize(post.file_size || 0))
-				.replace(/\{\{isImage\}\}/g, isImage ? 'true' : '')
-				.replace(/\{\{voice_url\}\}/g, post.voice_url || '')
-				.replace(/\{\{voiceDuration\}\}/g, post.voice_duration ? `${Math.floor(post.voice_duration / 60)}:${(post.voice_duration % 60).toString().padStart(2, '0')}` : '0:00')
-				.replace(/\{\{original_post\}\}/g, post.original_post ? 'true' : '')
-				.replace(/\{\{liked\}\}/g, isLiked ? 'true' : '')
-				.replace(/\{\{likes_count\}\}/g, post.likes?.length || 0)
-				.replace(/\{\{comments_count\}\}/g, post.comments_count || 0)
-				.replace(/\{\{reposts_count\}\}/g, post.reposts_count || 0);
+			// Подготовка данных для замены
+			const data = {
+				'[id]': post.id,
+				'[user.id]': user?.id || '',
+				'[user.username]': user?.username || 'Неизвестно',
+				'[user.emoji]': user?.emoji || '😀',
+				'[status_class]': onlineUsers.has(user?.id) ? 'status-online' : 'status-offline',
+				'[created_at]': post.created_at,
+				'[timeAgo]': formatTimeAgo(post.created_at),
+				'[content]': post.content || '',
+				'[file_url]': post.file_url || '',
+				'[file_name]': post.file_name || '',
+				'[fileSize]': formatFileSize(post.file_size || 0),
+				'[voiceDuration]': post.voice_duration ? 
+					`${Math.floor(post.voice_duration / 60)}:${(post.voice_duration % 60).toString().padStart(2, '0')}` : '0:00',
+				'[original_post.user.emoji]': post.original_post?.user?.emoji || '😀',
+				'[original_post.user.username]': post.original_post?.user?.username || 'Неизвестно',
+				'[original_post.content]': post.original_post?.content || '',
+				'[liked_class]': isLiked ? 'liked' : '',
+				'[like_icon]': isLiked ? 'fas fa-heart' : 'far fa-heart',
+				'[likes_count]': post.likes?.length || 0,
+				'[comments_count]': post.comments_count || 0,
+				'[reposts_count]': post.reposts_count || 0,
+				'[liked_active]': isLiked ? 'active' : '',
+				'[like_text]': isLiked ? 'Не нравится' : 'Нравится'
+			};
+			
+			// Начинаем с шаблона
+			let html = template;
+			
+			// Заменяем все переменные
+			Object.keys(data).forEach(key => {
+				html = html.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), data[key]);
+			});
+			
+			// Обработка условных блоков
+			html = html.replace(/\[if_original_post_id\]([\s\S]*?)\[\/if_original_post_id\]/g, 
+				post.original_post_id ? '$1' : '');
+			
+			html = html.replace(/\[if_verified\]([\s\S]*?)\[\/if_verified\]/g, 
+				user?.is_verified ? '$1' : '');
+			
+			html = html.replace(/\[if_file_url\]([\s\S]*?)\[\/if_file_url\]/g, 
+				post.file_url ? '$1' : '');
+			
+			html = html.replace(/\[if_voice_url\]([\s\S]*?)\[\/if_voice_url\]/g, 
+				post.voice_url ? '$1' : '');
+			
+			html = html.replace(/\[if_isImage\]([\s\S]*?)\[else_isImage\]([\s\S]*?)\[\/if_isImage\]/g, 
+				isImage ? '$1' : '$2');
+			
+			html = html.replace(/\[if_original_post\]([\s\S]*?)\[\/if_original_post\]/g, 
+				post.original_post ? '$1' : '');
+			
+			html = html.replace(/\[if_original_verified\]([\s\S]*?)\[\/if_original_verified\]/g, 
+				post.original_post?.user?.is_verified ? '$1' : '');
 			
 			const div = document.createElement('div');
 			div.innerHTML = html;
