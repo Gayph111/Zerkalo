@@ -2736,2070 +2736,2090 @@
     </script>
 
     <!-- Основной JavaScript код -->
-    <script>
-        // ========== КОНФИГУРАЦИЯ ==========
-        const SUPABASE_URL = 'https://kzbznupjamhualdewyxk.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6YnpudXBqYW1odWFsZGV3eXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgzNDY5OTQsImV4cCI6MjA1MzkyMjk5NH0.7Ll6UZ5BnQwJq9JYv2Z8X7Qw3y5X6Z8X7Qw3y5X6Z8';
-        
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        
-        // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
-        let currentUser = null;
-        let allUsers = [];
-        let allPosts = [];
-        let allGroups = [];
-        let notifications = [];
-        let conversations = [];
-        let currentMessages = [];
-        let currentConversation = null;
-        let onlineUsers = new Set();
-        let emojis = ['😀', '😎', '🤖', '👻', '🐱', '🦊', '🐶', '🦁', '🚀', '🎨', '🎮', '🎵', '📸', '📚', '🍳', '🌍', '👨‍💻', '👩‍💻', '🧠', '💡', '🔥', '🌟', '🌙', '☀️', '🌈', '🍕', '⚽', '🎭', '🎸', '🎬', '👑', '💎', '⭐', '🎯', '🏆', '🚀', '🎪', '🎨', '📚', '🔬', '💼', '🎭', '🎪', '🎸', '🎤', '🎬', '🎮', '🎲', '🏀', '⚽', '🎾', '🏐', '🎯', '♟️', '🎳', '🎰'];
-        
-        // ========== СИСТЕМНЫЕ УВЕДОМЛЕНИЯ ==========
-        function showNotification(title, message, type = 'info', duration = 5000) {
-            const container = document.getElementById('notificationContainer');
-            if (!container) return;
-            
-            const notification = document.createElement('div');
-            notification.className = `notification ${type}`;
-            
-            const icons = {
-                success: 'check-circle',
-                error: 'exclamation-circle',
-                warning: 'exclamation-triangle',
-                info: 'info-circle'
-            };
-            
-            notification.innerHTML = `
-                <div class="notification-icon">
-                    <i class="fas fa-${icons[type] || 'info-circle'}"></i>
-                </div>
-                <div class="notification-content">
-                    <div class="notification-title">${title}</div>
-                    <div class="notification-message">${message}</div>
-                </div>
-                <button class="notification-close">&times;</button>
-            `;
-            
-            container.appendChild(notification);
-            
-            const closeBtn = notification.querySelector('.notification-close');
-            if (closeBtn) {
-                closeBtn.addEventListener('click', () => {
-                    notification.classList.add('hiding');
-                    setTimeout(() => notification.remove(), 300);
-                });
-            }
-            
-            if (duration > 0) {
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.classList.add('hiding');
-                        setTimeout(() => notification.remove(), 300);
-                    }
-                }, duration);
-            }
-            
-            return notification;
-        }
-        
-        // ========== ФОРМАТИРОВАНИЕ ВРЕМЕНИ ==========
-        function formatTimeAgo(dateString) {
-            const date = new Date(dateString);
-            const now = new Date();
-            const diffMs = now - date;
-            const diffMins = Math.floor(diffMs / 60000);
-            const diffHours = Math.floor(diffMs / 3600000);
-            const diffDays = Math.floor(diffMs / 86400000);
-            
-            if (diffMins < 1) return 'только что';
-            if (diffMins < 60) return `${diffMins} мин. назад`;
-            if (diffHours < 24) return `${diffHours} ч. назад`;
-            if (diffDays < 7) return `${diffDays} д. назад`;
-            
-            return date.toLocaleDateString('ru-RU', {
-                day: 'numeric',
-                month: 'short',
-                year: diffDays > 365 ? 'numeric' : undefined
-            });
-        }
-        
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-        }
-        
-        // ========== РАБОТА С SUPABASE ==========
-        async function loadInitialData() {
-            try {
-                // Загружаем пользователей
-                const { data: users, error: usersError } = await supabase
-                    .from('users')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-                
-                if (usersError) throw usersError;
-                allUsers = users || [];
-                
-                // Загружаем посты
-                const { data: posts, error: postsError } = await supabase
-                    .from('posts')
-                    .select(`
-                        *,
-                        user:users(*),
-                        original_post:posts(*, user:users(*))
-                    `)
-                    .order('created_at', { ascending: false })
-                    .limit(50);
-                
-                if (postsError) throw postsError;
-                allPosts = posts || [];
-                
-                // Загружаем группы
-                const { data: groups, error: groupsError } = await supabase
-                    .from('groups')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-                
-                if (groupsError) throw groupsError;
-                allGroups = groups || [];
-                
-                // Загружаем уведомления для текущего пользователя
-                if (currentUser) {
-                    await loadNotifications();
-                    await loadConversations();
-                }
-                
-                return true;
-            } catch (error) {
-                console.error('Ошибка загрузки данных:', error);
-                showNotification('Ошибка', 'Не удалось загрузить данные', 'error');
-                return false;
-            }
-        }
-        
-        async function loadNotifications() {
-            if (!currentUser) return;
-            
-            try {
-                const { data, error } = await supabase
-                    .from('notifications')
-                    .select('*')
-                    .eq('user_id', currentUser.id)
-                    .order('created_at', { ascending: false })
-                    .limit(20);
-                
-                if (error) throw error;
-                notifications = data || [];
-                
-                // Обновляем бейдж
-                const unreadCount = notifications.filter(n => !n.is_read).length;
-                const badge = document.getElementById('notificationsBadge');
-                if (badge) {
-                    badge.textContent = unreadCount;
-                    badge.classList.toggle('hidden', unreadCount === 0);
-                }
-                
-                // Если открыта страница уведомлений, обновляем список
-                if (document.getElementById('notificationsPage') && !document.getElementById('notificationsPage').classList.contains('hidden')) {
-                    renderNotifications();
-                }
-            } catch (error) {
-                console.error('Ошибка загрузки уведомлений:', error);
-            }
-        }
-        
-        async function loadConversations() {
-            if (!currentUser) return;
-            
-            try {
-                const { data, error } = await supabase
-                    .from('conversations')
-                    .select('*')
-                    .contains('participants', [currentUser.id])
-                    .order('last_message_time', { ascending: false });
-                
-                if (error) throw error;
-                conversations = data || [];
-                
-                // Если открыта страница сообщений, обновляем список
-                if (document.getElementById('messagesPage') && !document.getElementById('messagesPage').classList.contains('hidden')) {
-                    renderConversations();
-                }
-            } catch (error) {
-                console.error('Ошибка загрузки диалогов:', error);
-            }
-        }
-        
-        // ========== РЕНДЕРИНГ ИНТЕРФЕЙСА ==========
-        function updateUI() {
-            if (!currentUser) return;
-            
-            // Обновляем информацию в шапке
-            document.getElementById('userAvatarEmoji').textContent = currentUser.emoji;
-            document.getElementById('profileEmoji').textContent = currentUser.emoji;
-            document.getElementById('currentUserEmoji').textContent = currentUser.emoji;
-            document.getElementById('profileName').textContent = currentUser.display_name;
-            document.getElementById('profileUsername').textContent = currentUser.username;
-            document.getElementById('profileClan').textContent = `${currentUser.clan} Клан`;
-            document.getElementById('profileBio').textContent = currentUser.description || 'Пользователь пока ничего не написал в описании';
-            document.getElementById('statPosts').textContent = currentUser.posts_count || 0;
-            document.getElementById('statFollowers').textContent = currentUser.followers_count || 0;
-            document.getElementById('statFollowing').textContent = currentUser.following_count || 0;
-            
-            // Показываем галочку верификации
-            const verifiedBadge = document.getElementById('profileVerifiedBadge');
-            if (verifiedBadge) {
-                verifiedBadge.classList.toggle('hidden', !currentUser.is_verified);
-            }
-            
-            // Показываем админку если пользователь @onegin
-            const adminNav = document.getElementById('navAdmin');
-            if (adminNav && currentUser.username === '@onegin') {
-                adminNav.classList.remove('hidden');
-            }
-            
-            // Обновляем онлайн статус
-            updateOnlineStatus();
-            
-            // Загружаем рекомендации и онлайн пользователей
-            loadOnlineUsers();
-            loadRecommendedUsers();
-            loadPopularGroups();
-        }
-        
-        function updateOnlineStatus() {
-            if (!currentUser) return;
-            
-            // Отмечаем текущего пользователя как онлайн
-            onlineUsers.add(currentUser.id);
-            
-            // Обновляем статус в интерфейсе
-            const statusIndicators = document.querySelectorAll('.status-indicator');
-            statusIndicators.forEach(indicator => {
-                const userId = indicator.closest('[data-user-id]')?.dataset.userId;
-                if (userId) {
-                    const user = allUsers.find(u => u.id === userId);
-                    if (user) {
-                        indicator.className = 'status-indicator ' + 
-                            (onlineUsers.has(user.id) ? 'status-online status-pulse' : 'status-offline');
-                    }
-                }
-            });
-            
-            // Обновляем счетчик онлайн
-            const onlineCount = document.getElementById('onlineCount');
-            if (onlineCount) {
-                onlineCount.textContent = `${onlineUsers.size} онлайн`;
-            }
-        }
-        
-        function loadOnlineUsers() {
-            const container = document.getElementById('onlineUsersList');
-            if (!container) return;
-            
-            // Показываем только онлайн пользователей, исключая текущего
-            const online = allUsers.filter(user => 
-                onlineUsers.has(user.id) && user.id !== currentUser?.id
-            ).slice(0, 10);
-            
-            if (online.length === 0) {
-                container.innerHTML = '<div class="text-center text-muted py-3">Нет пользователей онлайн</div>';
-                return;
-            }
-            
-            container.innerHTML = online.map(user => `
-                <div class="online-user" data-user-id="${user.id}">
-                    <div class="online-user-avatar">
-                        <span>${user.emoji}</span>
-                        <div class="status-indicator status-online"></div>
-                    </div>
-                    <div class="online-user-info">
-                        <div class="online-user-name">${user.username}</div>
-                        <div class="online-user-status">В сети</div>
-                    </div>
-                </div>
-            `).join('');
-            
-            // Добавляем обработчики кликов
-            container.querySelectorAll('.online-user').forEach(item => {
-                item.addEventListener('click', () => {
-                    const userId = item.dataset.userId;
-                    showUserProfile(userId);
-                });
-            });
-        }
-        
-        function loadRecommendedUsers() {
-            const container = document.getElementById('recommendedUsersList');
-            if (!container) return;
-            
-            // Рекомендуем пользователей, на которых не подписан текущий пользователь
-            const following = currentUser?.following || [];
-            const recommended = allUsers
-                .filter(user => 
-                    user.id !== currentUser?.id && 
-                    !following.includes(user.id)
-                )
-                .sort(() => Math.random() - 0.5)
-                .slice(0, 5);
-            
-            if (recommended.length === 0) {
-                container.innerHTML = '<div class="text-center text-muted py-3">Нет рекомендаций</div>';
-                return;
-            }
-            
-            container.innerHTML = recommended.map(user => `
-                <div class="recommended-user" data-user-id="${user.id}">
-                    <div class="user-avatar">
-                        <span>${user.emoji}</span>
-                    </div>
-                    <div class="recommended-user-info">
-                        <div class="recommended-user-name">${user.username}</div>
-                        <div class="recommended-user-bio">${user.description?.slice(0, 50) || 'Нет описания'}...</div>
-                    </div>
-                    <button class="btn btn-sm btn-primary follow-btn" data-user-id="${user.id}">
-                        Подписаться
-                    </button>
-                </div>
-            `).join('');
-            
-            // Добавляем обработчики
-            container.querySelectorAll('.recommended-user').forEach(item => {
-                item.addEventListener('click', (e) => {
-                    if (!e.target.classList.contains('follow-btn')) {
-                        const userId = item.dataset.userId;
-                        showUserProfile(userId);
-                    }
-                });
-            });
-            
-            container.querySelectorAll('.follow-btn').forEach(btn => {
-                btn.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    const userId = btn.dataset.userId;
-                    await toggleFollow(userId);
-                });
-            });
-        }
-        
-        function loadPopularGroups() {
-            const container = document.getElementById('popularGroupsList');
-            if (!container) return;
-            
-            const popular = allGroups
-                .sort((a, b) => (b.members_count || 0) - (a.members_count || 0))
-                .slice(0, 5);
-            
-            if (popular.length === 0) {
-                container.innerHTML = '<div class="text-center text-muted py-3">Нет групп</div>';
-                return;
-            }
-            
-            container.innerHTML = popular.map(group => `
-                <div class="online-user" data-group-id="${group.id}">
-                    <div class="online-user-avatar">
-                        <span>${group.avatar || '👥'}</span>
-                    </div>
-                    <div class="online-user-info">
-                        <div class="online-user-name">${group.name}</div>
-                        <div class="online-user-status">${group.members_count || 0} участников</div>
-                    </div>
-                </div>
-            `).join('');
-            
-            // Добавляем обработчики кликов
-            container.querySelectorAll('.online-user[data-group-id]').forEach(item => {
-                item.addEventListener('click', () => {
-                    const groupId = item.dataset.groupId;
-                    showGroupInfo(groupId);
-                });
-            });
-        }
-        
-        // ========== РЕНДЕРИНГ ПОСТОВ ==========
-        function renderPosts(posts = allPosts) {
-            const container = document.getElementById('postsContainer');
-            const emptyFeed = document.getElementById('emptyFeed');
-            const loader = document.getElementById('postsLoader');
-            
-            if (!container) return;
-            
-            // Скрываем лоадер
-            if (loader) loader.classList.add('hidden');
-            
-            // Очищаем контейнер
-            container.innerHTML = '';
-            
-            if (posts.length === 0) {
-                if (emptyFeed) emptyFeed.classList.remove('hidden');
-                return;
-            }
-            
-            if (emptyFeed) emptyFeed.classList.add('hidden');
-            
-            // Рендерим посты
-            posts.forEach(post => {
-                const postElement = createPostElement(post);
-                container.appendChild(postElement);
-            });
-            
-            // Добавляем обработчики событий
-            addPostEventListeners();
-        }
-        
-        function createPostElement(post) {
-            const template = document.getElementById('postTemplate').innerHTML;
-            const user = post.user || allUsers.find(u => u.id === post.user_id);
-            const isLiked = post.likes?.includes(currentUser?.id) || false;
-            const isImage = post.file_url && /\.(jpg|jpeg|png|gif|webp)$/i.test(post.file_url);
-            
-            const html = template
-                .replace(/\{\{id\}\}/g, post.id)
-                .replace(/\{\{original_post_id\}\}/g, post.original_post_id || '')
-                .replace(/\{\{user\.username\}\}/g, user?.username || 'Неизвестно')
-                .replace(/\{\{user\.id\}\}/g, user?.id || '')
-                .replace(/\{\{user\.emoji\}\}/g, user?.emoji || '😀')
-                .replace(/\{\{user\.is_online\}\}/g, onlineUsers.has(user?.id) ? 'true' : '')
-                .replace(/\{\{user\.is_verified\}\}/g, user?.is_verified ? 'true' : '')
-                .replace(/\{\{created_at\}\}/g, post.created_at)
-                .replace(/\{\{timeAgo\}\}/g, formatTimeAgo(post.created_at))
-                .replace(/\{\{content\}\}/g, post.content || '')
-                .replace(/\{\{file_url\}\}/g, post.file_url || '')
-                .replace(/\{\{file_name\}\}/g, post.file_name || '')
-                .replace(/\{\{fileSize\}\}/g, formatFileSize(post.file_size || 0))
-                .replace(/\{\{isImage\}\}/g, isImage ? 'true' : '')
-                .replace(/\{\{voice_url\}\}/g, post.voice_url || '')
-                .replace(/\{\{voiceDuration\}\}/g, post.voice_duration ? `${Math.floor(post.voice_duration / 60)}:${(post.voice_duration % 60).toString().padStart(2, '0')}` : '0:00')
-                .replace(/\{\{original_post\}\}/g, post.original_post ? 'true' : '')
-                .replace(/\{\{liked\}\}/g, isLiked ? 'true' : '')
-                .replace(/\{\{likes_count\}\}/g, post.likes?.length || 0)
-                .replace(/\{\{comments_count\}\}/g, post.comments_count || 0)
-                .replace(/\{\{reposts_count\}\}/g, post.reposts_count || 0);
-            
-            const div = document.createElement('div');
-            div.innerHTML = html;
-            return div.firstElementChild;
-        }
-        
-        function addPostEventListeners() {
-            // Лайки
-            document.querySelectorAll('.like-btn').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    const postId = btn.dataset.postId;
-                    await toggleLike(postId);
-                });
-            });
-            
-            // Комментарии
-            document.querySelectorAll('.comment-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const postId = btn.dataset.postId;
-                    const commentsSection = document.getElementById(`comments-${postId}`);
-                    if (commentsSection) {
-                        commentsSection.classList.toggle('hidden');
-                        if (!commentsSection.classList.contains('hidden')) {
-                            loadComments(postId);
-                        }
-                    }
-                });
-            });
-            
-            // Отправка комментариев
-            document.querySelectorAll('.send-comment-btn').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    const postId = btn.dataset.postId;
-                    const input = document.querySelector(`.comment-input[data-post-id="${postId}"]`);
-                    if (input && input.value.trim()) {
-                        await addComment(postId, input.value.trim());
-                        input.value = '';
-                    }
-                });
-            });
-            
-            // Репосты
-            document.querySelectorAll('.repost-btn').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    const postId = btn.dataset.postId;
-                    await createRepost(postId);
-                });
-            });
-            
-            // Просмотр профиля
-            document.querySelectorAll('.view-profile').forEach(el => {
-                el.addEventListener('click', () => {
-                    const userId = el.dataset.userId;
-                    if (userId) showUserProfile(userId);
-                });
-            });
-        }
-        
-        // ========== ВЗАИМОДЕЙСТВИЯ С ПОСТАМИ ==========
-        async function toggleLike(postId) {
-            if (!currentUser) {
-                showNotification('Ошибка', 'Войдите в систему', 'error');
-                return;
-            }
-            
-            try {
-                const post = allPosts.find(p => p.id === postId);
-                if (!post) return;
-                
-                const likes = post.likes || [];
-                const isLiked = likes.includes(currentUser.id);
-                
-                let newLikes;
-                if (isLiked) {
-                    newLikes = likes.filter(id => id !== currentUser.id);
-                } else {
-                    newLikes = [...likes, currentUser.id];
-                }
-                
-                const { error } = await supabase
-                    .from('posts')
-                    .update({ likes: newLikes })
-                    .eq('id', postId);
-                
-                if (error) throw error;
-                
-                // Обновляем локально
-                post.likes = newLikes;
-                
-                // Обновляем интерфейс
-                const likeBtn = document.querySelector(`.like-btn[data-post-id="${postId}"]`);
-                const likeStat = document.querySelector(`.post-stat[data-action="like"][data-post-id="${postId}"]`);
-                
-                if (likeBtn) {
-                    const icon = likeBtn.querySelector('i');
-                    const text = likeBtn.querySelector('span');
-                    if (isLiked) {
-                        icon.className = 'far fa-heart';
-                        text.textContent = 'Нравится';
-                        likeBtn.classList.remove('active');
-                    } else {
-                        icon.className = 'fas fa-heart';
-                        text.textContent = 'Не нравится';
-                        likeBtn.classList.add('active');
-                    }
-                }
-                
-                if (likeStat) {
-                    const count = likeStat.querySelector('span');
-                    const icon = likeStat.querySelector('i');
-                    count.textContent = newLikes.length;
-                    if (isLiked) {
-                        likeStat.classList.remove('liked');
-                        icon.className = 'far fa-heart';
-                    } else {
-                        likeStat.classList.add('liked');
-                        icon.className = 'fas fa-heart';
-                    }
-                }
-                
-                // Отправляем уведомление
-                if (!isLiked && post.user_id !== currentUser.id) {
-                    await createNotification(post.user_id, 'like', postId);
-                }
-                
-            } catch (error) {
-                console.error('Ошибка лайка:', error);
-                showNotification('Ошибка', 'Не удалось поставить лайк', 'error');
-            }
-        }
-        
-        async function addComment(postId, content) {
-            if (!currentUser) {
-                showNotification('Ошибка', 'Войдите в систему', 'error');
-                return;
-            }
-            
-            try {
-                // Получаем текущие комментарии
-                const post = allPosts.find(p => p.id === postId);
-                if (!post) return;
-                
-                const comments = post.comments || [];
-                const newComment = {
-                    id: Date.now().toString(),
-                    user_id: currentUser.id,
-                    user: {
-                        id: currentUser.id,
-                        username: currentUser.username,
-                        emoji: currentUser.emoji,
-                        is_verified: currentUser.is_verified
-                    },
-                    content,
-                    created_at: new Date().toISOString()
-                };
-                
-                // Обновляем в базе
-                const { error } = await supabase
-                    .from('posts')
-                    .update({ 
-                        comments: [...comments, newComment],
-                        comments_count: (post.comments_count || 0) + 1
-                    })
-                    .eq('id', postId);
-                
-                if (error) throw error;
-                
-                // Обновляем локально
-                post.comments = [...comments, newComment];
-                post.comments_count = (post.comments_count || 0) + 1;
-                
-                // Обновляем интерфейс
-                const commentsList = document.getElementById(`comments-list-${postId}`);
-                if (commentsList) {
-                    const template = document.getElementById('commentTemplate').innerHTML;
-                    const html = template
-                        .replace(/\{\{id\}\}/g, newComment.id)
-                        .replace(/\{\{user\.id\}\}/g, newComment.user.id)
-                        .replace(/\{\{user\.username\}\}/g, newComment.user.username)
-                        .replace(/\{\{user\.emoji\}\}/g, newComment.user.emoji)
-                        .replace(/\{\{timeAgo\}\}/g, 'только что')
-                        .replace(/\{\{content\}\}/g, newComment.content);
-                    
-                    commentsList.insertAdjacentHTML('beforeend', html);
-                    
-                    // Добавляем обработчик клика на профиль
-                    const newCommentEl = commentsList.lastElementChild;
-                    newCommentEl.querySelectorAll('.view-profile').forEach(el => {
-                        el.addEventListener('click', () => {
-                            const userId = el.dataset.userId;
-                            if (userId) showUserProfile(userId);
-                        });
-                    });
-                }
-                
-                // Обновляем счетчик комментариев
-                const commentStat = document.querySelector(`.post-stat[data-action="comment"][data-post-id="${postId}"] span`);
-                if (commentStat) {
-                    commentStat.textContent = post.comments_count;
-                }
-                
-                // Отправляем уведомление
-                if (post.user_id !== currentUser.id) {
-                    await createNotification(post.user_id, 'comment', postId);
-                }
-                
-            } catch (error) {
-                console.error('Ошибка комментария:', error);
-                showNotification('Ошибка', 'Не удалось добавить комментарий', 'error');
-            }
-        }
-        
-        async function loadComments(postId) {
-            const post = allPosts.find(p => p.id === postId);
-            if (!post || !post.comments) return;
-            
-            const container = document.getElementById(`comments-list-${postId}`);
-            if (!container) return;
-            
-            container.innerHTML = '';
-            
-            post.comments.forEach(comment => {
-                const template = document.getElementById('commentTemplate').innerHTML;
-                const html = template
-                    .replace(/\{\{id\}\}/g, comment.id || Date.now())
-                    .replace(/\{\{user\.id\}\}/g, comment.user_id || comment.user?.id)
-                    .replace(/\{\{user\.username\}\}/g, comment.user?.username || 'Неизвестно')
-                    .replace(/\{\{user\.emoji\}\}/g, comment.user?.emoji || '😀')
-                    .replace(/\{\{timeAgo\}\}/g, formatTimeAgo(comment.created_at))
-                    .replace(/\{\{content\}\}/g, comment.content);
-                
-                container.insertAdjacentHTML('beforeend', html);
-            });
-            
-            // Добавляем обработчики клика на профиль
-            container.querySelectorAll('.view-profile').forEach(el => {
-                el.addEventListener('click', () => {
-                    const userId = el.dataset.userId;
-                    if (userId) showUserProfile(userId);
-                });
-            });
-        }
-        
-        async function createRepost(postId) {
-            if (!currentUser) {
-                showNotification('Ошибка', 'Войдите в систему', 'error');
-                return;
-            }
-            
-            try {
-                const originalPost = allPosts.find(p => p.id === postId);
-                if (!originalPost) return;
-                
-                const { data: newPost, error } = await supabase
-                    .from('posts')
-                    .insert([{
-                        user_id: currentUser.id,
-                        content: '',
-                        original_post_id: postId,
-                        likes: [],
-                        comments: [],
-                        comments_count: 0,
-                        reposts_count: 0
-                    }])
-                    .select()
-                    .single();
-                
-                if (error) throw error;
-                
-                // Увеличиваем счетчик репостов у оригинального поста
-                await supabase
-                    .from('posts')
-                    .update({ 
-                        reposts_count: (originalPost.reposts_count || 0) + 1 
-                    })
-                    .eq('id', postId);
-                
-                // Обновляем локально
-                originalPost.reposts_count = (originalPost.reposts_count || 0) + 1;
-                newPost.user = currentUser;
-                newPost.original_post = originalPost;
-                allPosts.unshift(newPost);
-                
-                // Обновляем интерфейс
-                renderPosts(allPosts);
-                
-                // Отправляем уведомление
-                if (originalPost.user_id !== currentUser.id) {
-                    await createNotification(originalPost.user_id, 'repost', postId);
-                }
-                
-                showNotification('Успех', 'Пост репостнут!', 'success');
-                
-            } catch (error) {
-                console.error('Ошибка репоста:', error);
-                showNotification('Ошибка', 'Не удалось сделать репост', 'error');
-            }
-        }
-        
-        // ========== СОЗДАНИЕ ПОСТА ==========
-        async function createPost(content, attachments = {}) {
-            if (!currentUser) {
-                showNotification('Ошибка', 'Войдите в систему', 'error');
-                return false;
-            }
-            
-            try {
-                const postData = {
-                    user_id: currentUser.id,
-                    content: content.trim(),
-                    likes: [],
-                    comments: [],
-                    comments_count: 0,
-                    reposts_count: 0
-                };
-                
-                // Добавляем вложения если есть
-                if (attachments.file) {
-                    postData.file_url = attachments.file.url;
-                    postData.file_name = attachments.file.name;
-                    postData.file_size = attachments.file.size;
-                }
-                
-                if (attachments.voice) {
-                    postData.voice_url = attachments.voice.url;
-                    postData.voice_duration = attachments.voice.duration;
-                }
-                
-                const { data: newPost, error } = await supabase
-                    .from('posts')
-                    .insert([postData])
-                    .select(`
-                        *,
-                        user:users(*)
-                    `)
-                    .single();
-                
-                if (error) throw error;
-                
-                // Обновляем счетчик постов у пользователя
-                currentUser.posts_count = (currentUser.posts_count || 0) + 1;
-                await supabase
-                    .from('users')
-                    .update({ posts_count: currentUser.posts_count })
-                    .eq('id', currentUser.id);
-                
-                // Обновляем локально
-                allPosts.unshift(newPost);
-                
-                // Обновляем интерфейс
-                updateUI();
-                renderPosts(allPosts);
-                
-                // Очищаем форму
-                document.getElementById('postText').value = '';
-                const attachmentsContainer = document.getElementById('postAttachments');
-                if (attachmentsContainer) {
-                    attachmentsContainer.innerHTML = '';
-                    attachmentsContainer.classList.add('hidden');
-                }
-                
-                showNotification('Успех', 'Пост опубликован!', 'success');
-                return true;
-                
-            } catch (error) {
-                console.error('Ошибка создания поста:', error);
-                showNotification('Ошибка', 'Не удалось опубликовать пост', 'error');
-                return false;
-            }
-        }
-        
-        // ========== УПРАВЛЕНИЕ ПРОФИЛЕМ ==========
-        async function showUserProfile(userId) {
-            try {
-                const user = allUsers.find(u => u.id === userId);
-                if (!user) {
-                    // Если пользователя нет в локальном кэше, загружаем из базы
-                    const { data, error } = await supabase
-                        .from('users')
-                        .select('*')
-                        .eq('id', userId)
-                        .single();
-                    
-                    if (error) throw error;
-                    
-                    user = data;
-                    allUsers.push(user);
-                }
-                
-                // Загружаем посты пользователя
-                const { data: userPosts, error: postsError } = await supabase
-                    .from('posts')
-                    .select(`
-                        *,
-                        user:users(*),
-                        original_post:posts(*, user:users(*))
-                    `)
-                    .eq('user_id', userId)
-                    .order('created_at', { ascending: false });
-                
-                if (postsError) throw postsError;
-                
-                // Загружаем репосты пользователя
-                const reposts = userPosts.filter(p => p.original_post_id);
-                
-                // Подготавливаем данные для шаблона
-                const isOwnProfile = currentUser && currentUser.id === userId;
-                const isFollowing = currentUser?.following?.includes(userId) || false;
-                
-                const profileData = {
-                    ...user,
-                    is_own_profile: isOwnProfile,
-                    is_following: isFollowing,
-                    is_online: onlineUsers.has(userId),
-                    posts_count: user.posts_count || 0,
-                    followers_count: user.followers_count || 0,
-                    following_count: user.following_count || 0,
-                    reposts_count: reposts.length,
-                    description: user.description || 'Пользователь пока ничего не написал в описании'
-                };
-                
-                // Рендерим профиль
-                const template = document.getElementById('profileTemplate').innerHTML;
-                let html = template;
-                
-                // Заменяем все переменные в шаблоне
-                Object.keys(profileData).forEach(key => {
-                    html = html.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), profileData[key]);
-                });
-                
-                // Показываем страницу профиля
-                const profilePage = document.getElementById('profilePage');
-                const container = profilePage.querySelector('.container');
-                
-                container.innerHTML = html;
-                profilePage.classList.remove('hidden');
-                hideAllPages();
-                profilePage.classList.add('active');
-                
-                // Рендерим посты пользователя
-                const postsContainer = document.getElementById('profilePostsContainer');
-                if (postsContainer && userPosts.length > 0) {
-                    postsContainer.innerHTML = '';
-                    userPosts.forEach(post => {
-                        if (!post.original_post_id) { // Только оригинальные посты
-                            const postElement = createPostElement(post);
-                            postsContainer.appendChild(postElement);
-                        }
-                    });
-                    addPostEventListeners();
-                }
-                
-                // Рендерим репосты
-                const repostsContainer = document.getElementById('profileRepostsContainer');
-                if (repostsContainer && reposts.length > 0) {
-                    repostsContainer.innerHTML = '';
-                    reposts.forEach(post => {
-                        const postElement = createPostElement(post);
-                        repostsContainer.appendChild(postElement);
-                    });
-                    addPostEventListeners();
-                }
-                
-                // Добавляем обработчики событий
-                setupProfileEventListeners(userId, isOwnProfile);
-                
-                // Устанавливаем активную навигацию
-                setActiveNav(null);
-                
-            } catch (error) {
-                console.error('Ошибка загрузки профиля:', error);
-                showNotification('Ошибка', 'Не удалось загрузить профиль', 'error');
-                showPage('feed');
-            }
-        }
-        
-        function setupProfileEventListeners(userId, isOwnProfile) {
-            // Кнопка подписки
-            const followBtn = document.querySelector('.follow-btn');
-            if (followBtn && !isOwnProfile) {
-                followBtn.addEventListener('click', async () => {
-                    await toggleFollow(userId);
-                });
-            }
-            
-            // Кнопка редактирования
-            const editBtn = document.querySelector('#profileEditBtn');
-            if (editBtn && isOwnProfile) {
-                editBtn.addEventListener('click', () => {
-                    showEditProfileModal();
-                });
-            }
-            
-            // Кнопка сообщения
-            const messageBtn = document.querySelector('.message-btn');
-            if (messageBtn && !isOwnProfile) {
-                messageBtn.addEventListener('click', () => {
-                    startConversation(userId);
-                });
-            }
-            
-            // Табы профиля
-            document.querySelectorAll('.tab[data-tab]').forEach(tab => {
-                tab.addEventListener('click', () => {
-                    const tabName = tab.dataset.tab;
-                    switch (tabName) {
-                        case 'followers':
-                            loadFollowers(userId);
-                            break;
-                        case 'following':
-                            loadFollowing(userId);
-                            break;
-                        case 'media':
-                            loadMedia(userId);
-                            break;
-                    }
-                    
-                    // Активируем таб
-                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-                    tab.classList.add('active');
-                    document.getElementById(`profile${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Tab`).classList.add('active');
-                });
-            });
-        }
-        
-        async function toggleFollow(userId) {
-            if (!currentUser) {
-                showNotification('Ошибка', 'Войдите в систему', 'error');
-                return;
-            }
-            
-            try {
-                const userToFollow = allUsers.find(u => u.id === userId);
-                if (!userToFollow) return;
-                
-                const following = currentUser.following || [];
-                const isFollowing = following.includes(userId);
-                
-                let newFollowing;
-                if (isFollowing) {
-                    newFollowing = following.filter(id => id !== userId);
-                } else {
-                    newFollowing = [...following, userId];
-                }
-                
-                // Обновляем в базе
-                const { error } = await supabase
-                    .from('users')
-                    .update({ following: newFollowing })
-                    .eq('id', currentUser.id);
-                
-                if (error) throw error;
-                
-                // Обновляем локально
-                currentUser.following = newFollowing;
-                currentUser.following_count = newFollowing.length;
-                
-                // Обновляем счетчик подписчиков у другого пользователя
-                const followers = userToFollow.followers || [];
-                let newFollowers;
-                if (isFollowing) {
-                    newFollowers = followers.filter(id => id !== currentUser.id);
-                } else {
-                    newFollowers = [...followers, currentUser.id];
-                }
-                
-                await supabase
-                    .from('users')
-                    .update({ 
-                        followers: newFollowers,
-                        followers_count: newFollowers.length
-                    })
-                    .eq('id', userId);
-                
-                // Обновляем локально
-                userToFollow.followers = newFollowers;
-                userToFollow.followers_count = newFollowers.length;
-                
-                // Обновляем интерфейс
-                updateUI();
-                
-                // Обновляем кнопку подписки
-                const followBtn = document.querySelector(`.follow-btn[data-user-id="${userId}"]`);
-                if (followBtn) {
-                    if (isFollowing) {
-                        followBtn.innerHTML = '<i class="fas fa-user-plus"></i> Подписаться';
-                        followBtn.classList.remove('btn-danger');
-                        followBtn.classList.add('btn-primary');
-                    } else {
-                        followBtn.innerHTML = '<i class="fas fa-user-minus"></i> Отписаться';
-                        followBtn.classList.remove('btn-primary');
-                        followBtn.classList.add('btn-danger');
-                    }
-                }
-                
-                // Обновляем счетчики в профиле
-                const followersCount = document.querySelector(`.followers-count[data-user-id="${userId}"]`);
-                if (followersCount) {
-                    followersCount.textContent = userToFollow.followers_count;
-                }
-                
-                const followingCount = document.querySelector(`.following-count[data-user-id="${userId}"]`);
-                if (followingCount) {
-                    followingCount.textContent = currentUser.following_count;
-                }
-                
-                // Отправляем уведомление
-                if (!isFollowing) {
-                    await createNotification(userId, 'follow');
-                }
-                
-                showNotification('Успех', 
-                    isFollowing ? 'Вы отписались' : 'Вы подписались', 
-                    'success');
-                
-            } catch (error) {
-                console.error('Ошибка подписки:', error);
-                showNotification('Ошибка', 'Не удалось выполнить действие', 'error');
-            }
-        }
-        
-        // ========== УПРАВЛЕНИЕ ГРУППАМИ ==========
-        async function createGroup(groupData) {
-            if (!currentUser) {
-                showNotification('Ошибка', 'Войдите в систему', 'error');
-                return false;
-            }
-            
-            try {
-                const { data: newGroup, error } = await supabase
-                    .from('groups')
-                    .insert([{
-                        ...groupData,
-                        creator_id: currentUser.id,
-                        members: [currentUser.id],
-                        members_count: 1,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
-                    }])
-                    .select()
-                    .single();
-                
-                if (error) throw error;
-                
-                // Обновляем локально
-                allGroups.unshift(newGroup);
-                
-                // Обновляем интерфейс
-                loadPopularGroups();
-                
-                showNotification('Успех', 'Группа создана!', 'success');
-                return true;
-                
-            } catch (error) {
-                console.error('Ошибка создания группы:', error);
-                showNotification('Ошибка', 'Не удалось создать группу', 'error');
-                return false;
-            }
-        }
-        
-        async function joinGroup(groupId) {
-            if (!currentUser) {
-                showNotification('Ошибка', 'Войдите в систему', 'error');
-                return false;
-            }
-            
-            try {
-                const group = allGroups.find(g => g.id === groupId);
-                if (!group) return false;
-                
-                const members = group.members || [];
-                if (members.includes(currentUser.id)) {
-                    showNotification('Информация', 'Вы уже в группе', 'info');
-                    return false;
-                }
-                
-                const newMembers = [...members, currentUser.id];
-                
-                const { error } = await supabase
-                    .from('groups')
-                    .update({ 
-                        members: newMembers,
-                        members_count: newMembers.length
-                    })
-                    .eq('id', groupId);
-                
-                if (error) throw error;
-                
-                // Обновляем локально
-                group.members = newMembers;
-                group.members_count = newMembers.length;
-                
-                showNotification('Успех', 'Вы вступили в группу!', 'success');
-                return true;
-                
-            } catch (error) {
-                console.error('Ошибка вступления в группу:', error);
-                showNotification('Ошибка', 'Не удалось вступить в группу', 'error');
-                return false;
-            }
-        }
-        
-        // ========== ЛИЧНЫЕ СООБЩЕНИЯ ==========
-        async function startConversation(userId) {
-            if (!currentUser) return;
-            
-            try {
-                // Ищем существующий диалог
-                const existingConversation = conversations.find(conv => 
-                    !conv.is_group && 
-                    conv.participants.includes(currentUser.id) && 
-                    conv.participants.includes(userId)
-                );
-                
-                if (existingConversation) {
-                    // Открываем существующий диалог
-                    openConversation(existingConversation.id);
-                } else {
-                    // Создаем новый диалог
-                    const otherUser = allUsers.find(u => u.id === userId);
-                    if (!otherUser) return;
-                    
-                    const { data: newConversation, error } = await supabase
-                        .from('conversations')
-                        .insert([{
-                            name: otherUser.username,
-                            avatar: otherUser.emoji,
-                            is_group: false,
-                            participants: [currentUser.id, userId],
-                            last_message: '',
-                            last_message_time: new Date().toISOString()
-                        }])
-                        .select()
-                        .single();
-                    
-                    if (error) throw error;
-                    
-                    conversations.unshift(newConversation);
-                    openConversation(newConversation.id);
-                }
-                
-                // Переходим на страницу сообщений
-                showPage('messages');
-                
-            } catch (error) {
-                console.error('Ошибка создания диалога:', error);
-                showNotification('Ошибка', 'Не удалось начать диалог', 'error');
-            }
-        }
-        
-        async function openConversation(conversationId) {
-            try {
-                const conversation = conversations.find(c => c.id === conversationId);
-                if (!conversation) return;
-                
-                currentConversation = conversation;
-                
-                // Загружаем сообщения
-                const { data: messages, error } = await supabase
-                    .from('messages')
-                    .select('*')
-                    .eq('conversation_id', conversationId)
-                    .order('created_at', { ascending: true });
-                
-                if (error) throw error;
-                
-                currentMessages = messages || [];
-                
-                // Рендерим сообщения
-                renderMessages();
-                
-                // Помечаем диалог как активный
-                document.querySelectorAll('.conversation-item').forEach(item => {
-                    item.classList.remove('active');
-                });
-                const activeItem = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
-                if (activeItem) {
-                    activeItem.classList.add('active');
-                }
-                
-            } catch (error) {
-                console.error('Ошибка загрузки сообщений:', error);
-                showNotification('Ошибка', 'Не удалось загрузить сообщения', 'error');
-            }
-        }
-        
-        function renderMessages() {
-            const container = document.querySelector('.messages-list');
-            if (!container) return;
-            
-            container.innerHTML = '';
-            
-            currentMessages.forEach(message => {
-                const template = document.getElementById('messageTemplate').innerHTML;
-                const isOutgoing = message.sender_id === currentUser.id;
-                
-                const html = template
-                    .replace(/\{\{id\}\}/g, message.id)
-                    .replace(/\{\{outgoing\}\}/g, isOutgoing ? 'true' : '')
-                    .replace(/\{\{content\}\}/g, message.content || '')
-                    .replace(/\{\{file_url\}\}/g, message.file_url || '')
-                    .replace(/\{\{file_name\}\}/g, message.file_name || '')
-                    .replace(/\{\{created_at\}\}/g, formatTimeAgo(message.created_at));
-                
-                container.insertAdjacentHTML('beforeend', html);
-            });
-            
-            // Прокручиваем вниз
-            container.scrollTop = container.scrollHeight;
-        }
-        
-        async function sendMessage(content, attachments = {}) {
-            if (!currentUser || !currentConversation) return;
-            
-            try {
-                const messageData = {
-                    conversation_id: currentConversation.id,
-                    sender_id: currentUser.id,
-                    content: content.trim(),
-                    created_at: new Date().toISOString()
-                };
-                
-                // Добавляем вложения если есть
-                if (attachments.file) {
-                    messageData.file_url = attachments.file.url;
-                    messageData.file_name = attachments.file.name;
-                    messageData.file_size = attachments.file.size;
-                }
-                
-                if (attachments.voice) {
-                    messageData.voice_url = attachments.voice.url;
-                    messageData.voice_duration = attachments.voice.duration;
-                }
-                
-                const { data: newMessage, error } = await supabase
-                    .from('messages')
-                    .insert([messageData])
-                    .select()
-                    .single();
-                
-                if (error) throw error;
-                
-                // Обновляем локально
-                currentMessages.push(newMessage);
-                
-                // Обновляем последнее сообщение в диалоге
-                await supabase
-                    .from('conversations')
-                    .update({
-                        last_message: content.slice(0, 50) + (content.length > 50 ? '...' : ''),
-                        last_message_time: new Date().toISOString()
-                    })
-                    .eq('id', currentConversation.id);
-                
-                // Обновляем интерфейс
-                renderMessages();
-                
-                // Очищаем поле ввода
-                const messageInput = document.querySelector('.message-input');
-                if (messageInput) messageInput.value = '';
-                
-                return true;
-                
-            } catch (error) {
-                console.error('Ошибка отправки сообщения:', error);
-                showNotification('Ошибка', 'Не удалось отправить сообщение', 'error');
-                return false;
-            }
-        }
-        
-        // ========== АДМИН ПАНЕЛЬ ==========
-        async function loadAdminPanel() {
-            if (!currentUser || currentUser.username !== '@onegin') {
-                showNotification('Ошибка', 'Доступ запрещен', 'error');
-                showPage('feed');
-                return;
-            }
-            
-            try {
-                // Загружаем статистику
-                const totalUsers = allUsers.length;
-                const onlineUsersCount = onlineUsers.size;
-                const totalPosts = allPosts.length;
-                const totalGroups = allGroups.length;
-                
-                document.getElementById('adminTotalUsers').textContent = totalUsers;
-                document.getElementById('adminOnlineUsers').textContent = onlineUsersCount;
-                document.getElementById('adminTotalPosts').textContent = totalPosts;
-                document.getElementById('adminTotalGroups').textContent = totalGroups;
-                
-                // Загружаем пользователей для верификации
-                const usersToVerify = allUsers.filter(u => !u.is_verified).slice(0, 20);
-                
-                const usersList = document.getElementById('adminUsersList');
-                if (usersList) {
-                    usersList.innerHTML = usersToVerify.map(user => `
-                        <div class="admin-user-item">
-                            <div class="user-avatar">
-                                <span>${user.emoji}</span>
-                            </div>
-                            <div class="admin-user-info">
-                                <div class="admin-user-name">
-                                    ${user.username}
-                                    <span class="text-muted">(${user.display_name})</span>
-                                </div>
-                                <div class="admin-user-meta">
-                                    Постов: ${user.posts_count || 0} • 
-                                    Подписчиков: ${user.followers_count || 0}
-                                </div>
-                            </div>
-                            <button class="btn btn-success verify-user-btn" data-user-id="${user.id}">
-                                <i class="fas fa-check"></i> Верифицировать
-                            </button>
-                        </div>
-                    `).join('');
-                    
-                    // Добавляем обработчики
-                    usersList.querySelectorAll('.verify-user-btn').forEach(btn => {
-                        btn.addEventListener('click', async () => {
-                            const userId = btn.dataset.userId;
-                            await verifyUser(userId);
-                        });
-                    });
-                }
-                
-            } catch (error) {
-                console.error('Ошибка загрузки админ панели:', error);
-                showNotification('Ошибка', 'Не удалось загрузить админ панель', 'error');
-            }
-        }
-        
-        async function verifyUser(userId) {
-            try {
-                const { error } = await supabase
-                    .from('users')
-                    .update({ is_verified: true })
-                    .eq('id', userId);
-                
-                if (error) throw error;
-                
-                // Обновляем локально
-                const user = allUsers.find(u => u.id === userId);
-                if (user) {
-                    user.is_verified = true;
-                }
-                
-                // Обновляем интерфейс
-                loadAdminPanel();
-                updateUI();
-                
-                showNotification('Успех', 'Пользователь верифицирован', 'success');
-                
-            } catch (error) {
-                console.error('Ошибка верификации:', error);
-                showNotification('Ошибка', 'Не удалось верифицировать пользователя', 'error');
-            }
-        }
-        
-        // ========== УПРАВЛЕНИЕ УВЕДОМЛЕНИЯМИ ==========
-        async function createNotification(userId, type, postId = null) {
-            try {
-                let message = '';
-                switch (type) {
-                    case 'like':
-                        message = `${currentUser.username} поставил(а) лайк вашему посту`;
-                        break;
-                    case 'comment':
-                        message = `${currentUser.username} прокомментировал(а) ваш пост`;
-                        break;
-                    case 'repost':
-                        message = `${currentUser.username} репостнул(а) ваш пост`;
-                        break;
-                    case 'follow':
-                        message = `${currentUser.username} подписался(ась) на вас`;
-                        break;
-                }
-                
-                const { error } = await supabase
-                    .from('notifications')
-                    .insert([{
-                        user_id: userId,
-                        from_user_id: currentUser.id,
-                        post_id: postId,
-                        type,
-                        message,
-                        is_read: false,
-                        created_at: new Date().toISOString()
-                    }]);
-                
-                if (error) throw error;
-                
-            } catch (error) {
-                console.error('Ошибка создания уведомления:', error);
-            }
-        }
-        
-        function renderNotifications() {
-            const container = document.getElementById('notificationsList');
-            if (!container) return;
-            
-            if (notifications.length === 0) {
-                container.innerHTML = '<div class="text-center py-5 text-muted">Нет уведомлений</div>';
-                return;
-            }
-            
-            container.innerHTML = notifications.map(notification => `
-                <div class="notification-item ${notification.is_read ? '' : 'unread'}" data-notification-id="${notification.id}">
-                    <div class="d-flex align-start gap-3 p-3 border-bottom">
-                        <div class="user-avatar">
-                            <span>${allUsers.find(u => u.id === notification.from_user_id)?.emoji || '😀'}</span>
-                        </div>
-                        <div class="flex-1">
-                            <div class="mb-1">${notification.message}</div>
-                            <div class="text-muted small">${formatTimeAgo(notification.created_at)}</div>
-                        </div>
-                        ${!notification.is_read ? '<span class="badge">новое</span>' : ''}
-                    </div>
-                </div>
-            `).join('');
-            
-            // Добавляем обработчики
-            container.querySelectorAll('.notification-item').forEach(item => {
-                item.addEventListener('click', async () => {
-                    const notificationId = item.dataset.notificationId;
-                    await markNotificationAsRead(notificationId);
-                });
-            });
-        }
-        
-        async function markNotificationAsRead(notificationId) {
-            try {
-                const { error } = await supabase
-                    .from('notifications')
-                    .update({ is_read: true })
-                    .eq('id', notificationId);
-                
-                if (error) throw error;
-                
-                // Обновляем локально
-                const notification = notifications.find(n => n.id === notificationId);
-                if (notification) {
-                    notification.is_read = true;
-                }
-                
-                // Обновляем интерфейс
-                loadNotifications();
-                
-            } catch (error) {
-                console.error('Ошибка обновления уведомления:', error);
-            }
-        }
-        
-        // ========== УПРАВЛЕНИЕ СТРАНИЦАМИ ==========
-        function showPage(pageName) {
-            // Скрываем все страницы
-            hideAllPages();
-            
-            // Убираем активный класс у всех навигационных ссылок
-            document.querySelectorAll('.nav-link').forEach(link => {
-                link.classList.remove('active');
-            });
-            
-            // Показываем нужную страницу
-            switch (pageName) {
-                case 'feed':
-                    document.getElementById('mainApp').classList.remove('hidden');
-                    document.getElementById('navFeed').classList.add('active');
-                    renderPosts();
-                    break;
-                    
-                case 'profile':
-                    // Профиль открывается через showUserProfile
-                    break;
-                    
-                case 'messages':
-                    document.getElementById('messagesPage').classList.remove('hidden');
-                    document.getElementById('navMessages').classList.add('active');
-                    renderConversations();
-                    break;
-                    
-                case 'groups':
-                    document.getElementById('groupsPage').classList.remove('hidden');
-                    document.getElementById('navGroups').classList.add('active');
-                    renderGroups();
-                    break;
-                    
-                case 'notifications':
-                    document.getElementById('notificationsPage').classList.remove('hidden');
-                    document.getElementById('navNotifications').classList.add('active');
-                    renderNotifications();
-                    break;
-                    
-                case 'admin':
-                    document.getElementById('adminPage').classList.remove('hidden');
-                    document.getElementById('navAdmin').classList.add('active');
-                    loadAdminPanel();
-                    break;
-            }
-        }
-        
-        function hideAllPages() {
-            document.getElementById('mainApp').classList.add('hidden');
-            document.getElementById('profilePage').classList.add('hidden');
-            document.getElementById('messagesPage').classList.add('hidden');
-            document.getElementById('groupsPage').classList.add('hidden');
-            document.getElementById('notificationsPage').classList.add('hidden');
-            document.getElementById('adminPage').classList.add('hidden');
-        }
-        
-        function setActiveNav(page) {
-            document.querySelectorAll('.nav-link').forEach(link => {
-                link.classList.remove('active');
-            });
-            
-            if (page) {
-                const navLink = document.getElementById(`nav${page.charAt(0).toUpperCase() + page.slice(1)}`);
-                if (navLink) navLink.classList.add('active');
-            }
-        }
-        
-        // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
-        function populateEmojiSelectors() {
-            // Заполняем все селекторы эмодзи
-            const selectors = [
-                'registerEmojiSelector',
-                'clanEmojiSelector',
-                'editEmojiSelector',
-                'groupEmojiSelector'
-            ];
-            
-            selectors.forEach(selectorId => {
-                const container = document.getElementById(selectorId);
-                if (container) {
-                    container.innerHTML = '';
-                    emojis.forEach(emoji => {
-                        const div = document.createElement('div');
-                        div.className = 'emoji-option';
-                        div.textContent = emoji;
-                        div.addEventListener('click', () => {
-                            // Снимаем выделение со всех
-                            container.querySelectorAll('.emoji-option').forEach(opt => {
-                                opt.classList.remove('selected');
-                            });
-                            // Выделяем выбранный
-                            div.classList.add('selected');
-                            // Обновляем соответствующее скрытое поле
-                            const hiddenInput = document.getElementById(selectorId.replace('Selector', ''));
-                            if (hiddenInput) hiddenInput.value = emoji;
-                        });
-                        container.appendChild(div);
-                    });
-                    
-                    // Выбираем первый эмодзи по умолчанию
-                    if (container.firstChild) {
-                        container.firstChild.classList.add('selected');
-                    }
-                }
-            });
-        }
-        
-        function setupModal(modalId, openBtnId = null, closeBtnId = null) {
-            const modal = document.getElementById(modalId);
-            if (!modal) return;
-            
-            // Открытие модалки
-            if (openBtnId) {
-                const openBtn = document.getElementById(openBtnId);
-                if (openBtn) {
-                    openBtn.addEventListener('click', () => {
-                        modal.classList.add('active');
-                    });
-                }
-            }
-            
-            // Закрытие модалки
-            if (closeBtnId) {
-                const closeBtn = document.getElementById(closeBtnId);
-                if (closeBtn) {
-                    closeBtn.addEventListener('click', () => {
-                        modal.classList.remove('active');
-                    });
-                }
-            }
-            
-            // Закрытие по клику на оверлей
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    modal.classList.remove('active');
-                }
-            });
-        }
-        
-        function showEditProfileModal() {
-            const modal = document.getElementById('editProfileModal');
-            if (!modal) return;
-            
-            // Заполняем поля текущими данными
-            document.getElementById('editDisplayName').value = currentUser.display_name;
-            document.getElementById('editBio').value = currentUser.description || '';
-            document.getElementById('editStatus').value = currentUser.status || '';
-            document.getElementById('editEmoji').value = currentUser.emoji;
-            
-            // Выбираем текущий эмодзи
-            const emojiSelector = document.getElementById('editEmojiSelector');
-            if (emojiSelector) {
-                emojiSelector.querySelectorAll('.emoji-option').forEach(opt => {
-                    opt.classList.remove('selected');
-                    if (opt.textContent === currentUser.emoji) {
-                        opt.classList.add('selected');
-                    }
-                });
-            }
-            
-            modal.classList.add('active');
-        }
-        
-        // ========== ИНИЦИАЛИЗАЦИЯ ==========
-        async function initApp() {
-            // Проверяем сохраненного пользователя
-            const savedUser = localStorage.getItem('mirror_user');
-            if (savedUser) {
-                try {
-                    currentUser = JSON.parse(savedUser);
-                    await loadInitialData();
-                    showMainApp();
-                    return;
-                } catch (error) {
-                    console.error('Ошибка загрузки пользователя:', error);
-                    localStorage.removeItem('mirror_user');
-                }
-            }
-            
-            // Показываем форму авторизации
-            showAuthPage();
-        }
-        
-        function showMainApp() {
-            document.getElementById('authPage').classList.add('hidden');
-            document.getElementById('mainApp').classList.remove('hidden');
-            
-            // Обновляем интерфейс
-            updateUI();
-            
-            // Рендерим посты
-            renderPosts();
-            
-            // Показываем ленту
-            showPage('feed');
-        }
-        
-        function showAuthPage() {
-            document.getElementById('authPage').classList.remove('hidden');
-            document.getElementById('mainApp').classList.add('hidden');
-        }
-        
-        // ========== ОБРАБОТЧИКИ СОБЫТИЙ ==========
-        document.addEventListener('DOMContentLoaded', async () => {
-            // Инициализируем селекторы эмодзи
-            populateEmojiSelectors();
-            
-            // Настраиваем модальные окна
-            setupModal('clanModal', null, 'closeClanModal');
-            setupModal('editProfileModal', 'editProfileBtn', 'closeEditProfileModal');
-            setupModal('createGroupModal', 'createGroupBtn', 'closeCreateGroupModal');
-            setupModal('voiceModal', 'addVoiceBtn', 'closeVoiceModal');
-            setupModal('fileModal', 'addFileBtn', 'closeFileModal');
-            
-            // Авторизация
-            document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const username = document.getElementById('loginUsername').value.trim();
-                const password = document.getElementById('loginPassword').value;
-                
-                // Для демо - проверяем хардкод
-                if (username === '@onegin' && password === 'admin123') {
-                    currentUser = {
-                        id: 'demo-onegin',
-                        username: '@onegin',
-                        display_name: 'Евгений Онегин',
-                        emoji: '👑',
-                        description: 'Владелец социальной сети "Зеркало"',
-                        is_verified: true,
-                        posts_count: 5,
-                        followers_count: 1000,
-                        following_count: 50,
-                        following: [],
-                        clan: '👑'
-                    };
-                    
-                    localStorage.setItem('mirror_user', JSON.stringify(currentUser));
-                    await loadInitialData();
-                    showMainApp();
-                    return;
-                }
-                
-                // Поиск пользователя в базе данных
-                try {
-                    const { data: user, error } = await supabase
-                        .from('users')
-                        .select('*')
-                        .or(`username.eq.${username},email.eq.${username}`)
-                        .eq('password_hash', password)
-                        .single();
-                    
-                    if (error || !user) {
-                        showNotification('Ошибка', 'Неверные данные для входа', 'error');
-                        return;
-                    }
-                    
-                    currentUser = user;
-                    localStorage.setItem('mirror_user', JSON.stringify(currentUser));
-                    await loadInitialData();
-                    showMainApp();
-                    
-                } catch (error) {
-                    console.error('Ошибка входа:', error);
-                    showNotification('Ошибка', 'Произошла ошибка при входе', 'error');
-                }
-            });
-            
-            // Регистрация
-            document.getElementById('registerForm')?.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                const username = document.getElementById('regUsername').value.trim();
-                const displayName = document.getElementById('regDisplayName').value.trim();
-                const email = document.getElementById('regEmail').value.trim();
-                const description = document.getElementById('regDescription').value.trim();
-                const emoji = document.getElementById('regEmoji').value;
-                const password = document.getElementById('regPassword').value;
-                const confirmPassword = document.getElementById('regConfirmPassword').value;
-                
-                // Валидация
-                if (!username.startsWith('@')) {
-                    showNotification('Ошибка', 'Юзернейм должен начинаться с @', 'error');
-                    return;
-                }
-                
-                if (password.length < 8) {
-                    showNotification('Ошибка', 'Пароль должен быть не менее 8 символов', 'error');
-                    return;
-                }
-                
-                if (password !== confirmPassword) {
-                    showNotification('Ошибка', 'Пароли не совпадают', 'error');
-                    return;
-                }
-                
-                try {
-                    const { data: existingUser, error: checkError } = await supabase
-                        .from('users')
-                        .select('id')
-                        .eq('username', username)
-                        .single();
-                    
-                    if (existingUser) {
-                        showNotification('Ошибка', 'Этот юзернейм уже занят', 'error');
-                        return;
-                    }
-                    
-                    const { data: newUser, error: insertError } = await supabase
-                        .from('users')
-                        .insert([{
-                            username,
-                            display_name: displayName,
-                            email: email || null,
-                            description: description || null,
-                            emoji,
-                            password_hash: password,
-                            clan: emoji,
-                            is_verified: false,
-                            posts_count: 0,
-                            followers_count: 0,
-                            following_count: 0,
-                            following: [],
-                            followers: []
-                        }])
-                        .select()
-                        .single();
-                    
-                    if (insertError) throw insertError;
-                    
-                    currentUser = newUser;
-                    localStorage.setItem('mirror_user', JSON.stringify(currentUser));
-                    await loadInitialData();
-                    showMainApp();
-                    
-                    showNotification('Успех', 'Регистрация прошла успешно!', 'success');
-                    
-                } catch (error) {
-                    console.error('Ошибка регистрации:', error);
-                    showNotification('Ошибка', 'Не удалось зарегистрироваться', 'error');
-                }
-            });
-            
-            // Переключение вкладок авторизации
-            document.getElementById('loginTab')?.addEventListener('click', () => {
-                document.getElementById('loginTab').classList.add('active');
-                document.getElementById('registerTab').classList.remove('active');
-                document.getElementById('loginForm').classList.add('active');
-                document.getElementById('registerForm').classList.remove('active');
-            });
-            
-            document.getElementById('registerTab')?.addEventListener('click', () => {
-                document.getElementById('registerTab').classList.add('active');
-                document.getElementById('loginTab').classList.remove('active');
-                document.getElementById('registerForm').classList.add('active');
-                document.getElementById('loginForm').classList.remove('active');
-            });
-            
-            // Создание поста
-            document.getElementById('publishPostBtn')?.addEventListener('click', async () => {
-                const content = document.getElementById('postText').value.trim();
-                if (!content) {
-                    showNotification('Ошибка', 'Введите текст поста', 'error');
-                    return;
-                }
-                
-                await createPost(content);
-            });
-            
-            // Выход
-            document.getElementById('logoutBtn')?.addEventListener('click', () => {
-                currentUser = null;
-                localStorage.removeItem('mirror_user');
-                showAuthPage();
-                showNotification('Информация', 'Вы вышли из системы', 'info');
-            });
-            
-            // Навигация
-            document.querySelectorAll('.nav-link').forEach(link => {
-                link.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const page = link.dataset.page;
-                    if (page) showPage(page);
-                });
-            });
-            
-            // Логотип - переход на ленту
-            document.getElementById('homeLogo')?.addEventListener('click', (e) => {
-                e.preventDefault();
-                showPage('feed');
-            });
-            
-            // Просмотр своего профиля
-            document.getElementById('viewProfileBtn')?.addEventListener('click', () => {
-                if (currentUser) {
-                    showUserProfile(currentUser.id);
-                }
-            });
-            
-            // Создание поста из пустой ленты
-            document.getElementById('emptyFeedPostBtn')?.addEventListener('click', () => {
-                document.getElementById('postText').focus();
-            });
-            
-            // Сохранение профиля
-            document.getElementById('saveProfileBtn')?.addEventListener('click', async () => {
-                const displayName = document.getElementById('editDisplayName').value.trim();
-                const bio = document.getElementById('editBio').value.trim();
-                const status = document.getElementById('editStatus').value.trim();
-                const emoji = document.getElementById('editEmoji').value;
-                
-                if (!displayName) {
-                    showNotification('Ошибка', 'Введите имя', 'error');
-                    return;
-                }
-                
-                try {
-                    const { error } = await supabase
-                        .from('users')
-                        .update({
-                            display_name: displayName,
-                            description: bio,
-                            status: status,
-                            emoji: emoji,
-                            clan: emoji,
-                            updated_at: new Date().toISOString()
-                        })
-                        .eq('id', currentUser.id);
-                    
-                    if (error) throw error;
-                    
-                    // Обновляем локально
-                    currentUser.display_name = displayName;
-                    currentUser.description = bio;
-                    currentUser.status = status;
-                    currentUser.emoji = emoji;
-                    currentUser.clan = emoji;
-                    
-                    // Сохраняем в localStorage
-                    localStorage.setItem('mirror_user', JSON.stringify(currentUser));
-                    
-                    // Обновляем интерфейс
-                    updateUI();
-                    
-                    // Закрываем модалку
-                    document.getElementById('editProfileModal').classList.remove('active');
-                    
-                    showNotification('Успех', 'Профиль обновлен', 'success');
-                    
-                } catch (error) {
-                    console.error('Ошибка обновления профиля:', error);
-                    showNotification('Ошибка', 'Не удалось обновить профиль', 'error');
-                }
-            });
-            
-            // Создание группы
-            document.getElementById('saveGroupBtn')?.addEventListener('click', async () => {
-                const name = document.getElementById('groupName').value.trim();
-                const username = document.getElementById('groupUsername').value.trim();
-                const description = document.getElementById('groupDescription').value.trim();
-                const emoji = document.getElementById('groupEmoji').value;
-                const type = document.querySelector('[data-group-type].active')?.dataset.groupType || 'group';
-                const privacy = document.querySelector('[data-privacy].active')?.dataset.privacy || 'public';
-                
-                if (!name || !username) {
-                    showNotification('Ошибка', 'Заполните обязательные поля', 'error');
-                    return;
-                }
-                
-                if (!username.startsWith('@')) {
-                    showNotification('Ошибка', 'Юзернейм должен начинаться с @', 'error');
-                    return;
-                }
-                
-                const groupData = {
-                    name,
-                    username,
-                    description,
-                    avatar: emoji,
-                    type,
-                    is_public: privacy === 'public',
-                    is_verified: false
-                };
-                
-                const success = await createGroup(groupData);
-                if (success) {
-                    document.getElementById('createGroupModal').classList.remove('active');
-                }
-            });
-            
-            // Поиск
-            document.getElementById('searchInput')?.addEventListener('input', (e) => {
-                const query = e.target.value.trim().toLowerCase();
-                if (query.length < 2) {
-                    document.getElementById('searchResults')?.classList.add('hidden');
-                    return;
-                }
-                
-                // Поиск пользователей, групп и сообществ
-                const users = allUsers.filter(u => 
-                    u.username.toLowerCase().includes(query) || 
-                    u.display_name.toLowerCase().includes(query)
-                ).slice(0, 5);
-                
-                const groups = allGroups.filter(g => 
-                    g.name.toLowerCase().includes(query) || 
-                    g.username.toLowerCase().includes(query)
-                ).slice(0, 5);
-                
-                const results = [...users, ...groups];
-                
-                const resultsContainer = document.getElementById('searchResults');
-                if (resultsContainer) {
-                    if (results.length === 0) {
-                        resultsContainer.innerHTML = '<div class="search-result-item text-muted p-3">Ничего не найдено</div>';
-                    } else {
-                        resultsContainer.innerHTML = results.map(item => `
-                            <div class="search-result-item p-3 border-bottom cursor-pointer" data-id="${item.id}" data-type="${item.username ? 'user' : 'group'}">
-                                <div class="d-flex align-center gap-3">
-                                    <div class="user-avatar">
-                                        <span>${item.emoji || item.avatar || '👤'}</span>
-                                    </div>
-                                    <div>
-                                        <div class="font-weight-medium">${item.username || item.name}</div>
-                                        <div class="text-muted small">${item.display_name || item.description?.slice(0, 50) || ''}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        `).join('');
-                        
-                        // Добавляем обработчики
-                        resultsContainer.querySelectorAll('.search-result-item').forEach(item => {
-                            item.addEventListener('click', () => {
-                                const id = item.dataset.id;
-                                const type = item.dataset.type;
-                                
-                                if (type === 'user') {
-                                    showUserProfile(id);
-                                } else {
-                                    showGroupInfo(id);
-                                }
-                                
-                                document.getElementById('searchResults').classList.add('hidden');
-                                document.getElementById('searchInput').value = '';
-                            });
-                        });
-                    }
-                    
-                    resultsContainer.classList.remove('hidden');
-                }
-            });
-            
-            // Запускаем приложение
-            await initApp();
-            
-            // Обновляем онлайн статус каждые 30 секунд
-            setInterval(() => {
-                updateOnlineStatus();
-            }, 30000);
-            
-            // Обновляем данные каждую минуту
-            setInterval(async () => {
-                if (currentUser) {
-                    await loadInitialData();
-                    updateUI();
-                }
-            }, 60000);
-        });
-    </script>
+	<script>
+		// ========== КОНФИГУРАЦИЯ ==========
+		const SUPABASE_URL = 'https://kzbznupjamhualdewyxk.supabase.co';
+		const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6YnpudXBqYW1odWFsZGV3eXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgzNDY5OTQsImV4cCI6MjA1MzkyMjk5NH0.7Ll6UZ5BnQwJq9JYv2Z8X7Qw3y5X6Z8X7Qw3y5X6Z8';
+		
+		// УБРАЛИ ПОВТОРНОЕ ОБЪЯВЛЕНИЕ supabase - клиент уже создан в HEAD
+		// const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+		
+		// Используем уже созданный клиент из глобальной области
+		// Если клиент еще не создан, создаем его
+		let supabase;
+		try {
+			supabase = window.supabase || window.supabaseClient;
+			if (!supabase) {
+				supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+				window.supabaseClient = supabase;
+			}
+		} catch (error) {
+			console.error('Ошибка инициализации Supabase:', error);
+			showNotification('Ошибка', 'Не удалось подключиться к базе данных', 'error');
+		}
+		
+		// ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
+		let currentUser = null;
+		let allUsers = [];
+		let allPosts = [];
+		let allGroups = [];
+		let notifications = [];
+		let conversations = [];
+		let currentMessages = [];
+		let currentConversation = null;
+		let onlineUsers = new Set();
+		let emojis = ['😀', '😎', '🤖', '👻', '🐱', '🦊', '🐶', '🦁', '🚀', '🎨', '🎮', '🎵', '📸', '📚', '🍳', '🌍', '👨‍💻', '👩‍💻', '🧠', '💡', '🔥', '🌟', '🌙', '☀️', '🌈', '🍕', '⚽', '🎭', '🎸', '🎬', '👑', '💎', '⭐', '🎯', '🏆', '🚀', '🎪', '🎨', '📚', '🔬', '💼', '🎭', '🎪', '🎸', '🎤', '🎬', '🎮', '🎲', '🏀', '⚽', '🎾', '🏐', '🎯', '♟️', '🎳', '🎰'];
+		
+		// ========== СИСТЕМНЫЕ УВЕДОМЛЕНИЯ ==========
+		function showNotification(title, message, type = 'info', duration = 5000) {
+			const container = document.getElementById('notificationContainer');
+			if (!container) return;
+			
+			const notification = document.createElement('div');
+			notification.className = `notification ${type}`;
+			
+			const icons = {
+				success: 'check-circle',
+				error: 'exclamation-circle',
+				warning: 'exclamation-triangle',
+				info: 'info-circle'
+			};
+			
+			notification.innerHTML = `
+				<div class="notification-icon">
+					<i class="fas fa-${icons[type] || 'info-circle'}"></i>
+				</div>
+				<div class="notification-content">
+					<div class="notification-title">${title}</div>
+					<div class="notification-message">${message}</div>
+				</div>
+				<button class="notification-close">&times;</button>
+			`;
+			
+			container.appendChild(notification);
+			
+			const closeBtn = notification.querySelector('.notification-close');
+			if (closeBtn) {
+				closeBtn.addEventListener('click', () => {
+					notification.classList.add('hiding');
+					setTimeout(() => notification.remove(), 300);
+				});
+			}
+			
+			if (duration > 0) {
+				setTimeout(() => {
+					if (notification.parentNode) {
+						notification.classList.add('hiding');
+						setTimeout(() => notification.remove(), 300);
+					}
+				}, duration);
+			}
+			
+			return notification;
+		}
+		
+		// ========== ФОРМАТИРОВАНИЕ ВРЕМЕНИ ==========
+		function formatTimeAgo(dateString) {
+			const date = new Date(dateString);
+			const now = new Date();
+			const diffMs = now - date;
+			const diffMins = Math.floor(diffMs / 60000);
+			const diffHours = Math.floor(diffMs / 3600000);
+			const diffDays = Math.floor(diffMs / 86400000);
+			
+			if (diffMins < 1) return 'только что';
+			if (diffMins < 60) return `${diffMins} мин. назад`;
+			if (diffHours < 24) return `${diffHours} ч. назад`;
+			if (diffDays < 7) return `${diffDays} д. назад`;
+			
+			return date.toLocaleDateString('ru-RU', {
+				day: 'numeric',
+				month: 'short',
+				year: diffDays > 365 ? 'numeric' : undefined
+			});
+		}
+		
+		function formatFileSize(bytes) {
+			if (bytes === 0) return '0 Bytes';
+			const k = 1024;
+			const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+			const i = Math.floor(Math.log(bytes) / Math.log(k));
+			return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+		}
+		
+		// ========== РАБОТА С SUPABASE ==========
+		async function loadInitialData() {
+			if (!supabase) {
+				console.error('Supabase не инициализирован');
+				return false;
+			}
+			
+			try {
+				// Загружаем пользователей
+				const { data: users, error: usersError } = await supabase
+					.from('users')
+					.select('*')
+					.order('created_at', { ascending: false });
+				
+				if (usersError) throw usersError;
+				allUsers = users || [];
+				
+				// Загружаем посты
+				const { data: posts, error: postsError } = await supabase
+					.from('posts')
+					.select(`
+						*,
+						user:users(*),
+						original_post:posts(*, user:users(*))
+					`)
+					.order('created_at', { ascending: false })
+					.limit(50);
+				
+				if (postsError) throw postsError;
+				allPosts = posts || [];
+				
+				// Загружаем группы
+				const { data: groups, error: groupsError } = await supabase
+					.from('groups')
+					.select('*')
+					.order('created_at', { ascending: false });
+				
+				if (groupsError) throw groupsError;
+				allGroups = groups || [];
+				
+				// Загружаем уведомления для текущего пользователя
+				if (currentUser) {
+					await loadNotifications();
+					await loadConversations();
+				}
+				
+				return true;
+			} catch (error) {
+				console.error('Ошибка загрузки данных:', error);
+				showNotification('Ошибка', 'Не удалось загрузить данные', 'error');
+				return false;
+			}
+		}
+		
+		async function loadNotifications() {
+			if (!currentUser || !supabase) return;
+			
+			try {
+				const { data, error } = await supabase
+					.from('notifications')
+					.select('*')
+					.eq('user_id', currentUser.id)
+					.order('created_at', { ascending: false })
+					.limit(20);
+				
+				if (error) throw error;
+				notifications = data || [];
+				
+				// Обновляем бейдж
+				const unreadCount = notifications.filter(n => !n.is_read).length;
+				const badge = document.getElementById('notificationsBadge');
+				if (badge) {
+					badge.textContent = unreadCount;
+					badge.classList.toggle('hidden', unreadCount === 0);
+				}
+				
+				// Если открыта страница уведомлений, обновляем список
+				if (document.getElementById('notificationsPage') && !document.getElementById('notificationsPage').classList.contains('hidden')) {
+					renderNotifications();
+				}
+			} catch (error) {
+				console.error('Ошибка загрузки уведомлений:', error);
+			}
+		}
+		
+		async function loadConversations() {
+			if (!currentUser || !supabase) return;
+			
+			try {
+				const { data, error } = await supabase
+					.from('conversations')
+					.select('*')
+					.contains('participants', [currentUser.id])
+					.order('last_message_time', { ascending: false });
+				
+				if (error) throw error;
+				conversations = data || [];
+				
+				// Если открыта страница сообщений, обновляем список
+				if (document.getElementById('messagesPage') && !document.getElementById('messagesPage').classList.contains('hidden')) {
+					renderConversations();
+				}
+			} catch (error) {
+				console.error('Ошибка загрузки диалогов:', error);
+			}
+		}
+		
+		// ========== РЕНДЕРИНГ ИНТЕРФЕЙСА ==========
+		function updateUI() {
+			if (!currentUser) return;
+			
+			// Обновляем информацию в шапке
+			document.getElementById('userAvatarEmoji').textContent = currentUser.emoji;
+			document.getElementById('profileEmoji').textContent = currentUser.emoji;
+			document.getElementById('currentUserEmoji').textContent = currentUser.emoji;
+			document.getElementById('profileName').textContent = currentUser.display_name;
+			document.getElementById('profileUsername').textContent = currentUser.username;
+			document.getElementById('profileClan').textContent = `${currentUser.clan} Клан`;
+			document.getElementById('profileBio').textContent = currentUser.description || 'Пользователь пока ничего не написал в описании';
+			document.getElementById('statPosts').textContent = currentUser.posts_count || 0;
+			document.getElementById('statFollowers').textContent = currentUser.followers_count || 0;
+			document.getElementById('statFollowing').textContent = currentUser.following_count || 0;
+			
+			// Показываем галочку верификации
+			const verifiedBadge = document.getElementById('profileVerifiedBadge');
+			if (verifiedBadge) {
+				verifiedBadge.classList.toggle('hidden', !currentUser.is_verified);
+			}
+			
+			// Показываем админку если пользователь @onegin
+			const adminNav = document.getElementById('navAdmin');
+			if (adminNav && currentUser.username === '@onegin') {
+				adminNav.classList.remove('hidden');
+			}
+			
+			// Обновляем онлайн статус
+			updateOnlineStatus();
+			
+			// Загружаем рекомендации и онлайн пользователей
+			loadOnlineUsers();
+			loadRecommendedUsers();
+			loadPopularGroups();
+		}
+		
+		function updateOnlineStatus() {
+			if (!currentUser) return;
+			
+			// Отмечаем текущего пользователя как онлайн
+			onlineUsers.add(currentUser.id);
+			
+			// Обновляем статус в интерфейсе
+			const statusIndicators = document.querySelectorAll('.status-indicator');
+			statusIndicators.forEach(indicator => {
+				const userId = indicator.closest('[data-user-id]')?.dataset.userId;
+				if (userId) {
+					const user = allUsers.find(u => u.id === userId);
+					if (user) {
+						indicator.className = 'status-indicator ' + 
+							(onlineUsers.has(user.id) ? 'status-online status-pulse' : 'status-offline');
+					}
+				}
+			});
+			
+			// Обновляем счетчик онлайн
+			const onlineCount = document.getElementById('onlineCount');
+			if (onlineCount) {
+				onlineCount.textContent = `${onlineUsers.size} онлайн`;
+			}
+		}
+		
+		function loadOnlineUsers() {
+			const container = document.getElementById('onlineUsersList');
+			if (!container) return;
+			
+			// Показываем только онлайн пользователей, исключая текущего
+			const online = allUsers.filter(user => 
+				onlineUsers.has(user.id) && user.id !== currentUser?.id
+			).slice(0, 10);
+			
+			if (online.length === 0) {
+				container.innerHTML = '<div class="text-center text-muted py-3">Нет пользователей онлайн</div>';
+				return;
+			}
+			
+			container.innerHTML = online.map(user => `
+				<div class="online-user" data-user-id="${user.id}">
+					<div class="online-user-avatar">
+						<span>${user.emoji}</span>
+						<div class="status-indicator status-online"></div>
+					</div>
+					<div class="online-user-info">
+						<div class="online-user-name">${user.username}</div>
+						<div class="online-user-status">В сети</div>
+					</div>
+				</div>
+			`).join('');
+			
+			// Добавляем обработчики кликов
+			container.querySelectorAll('.online-user').forEach(item => {
+				item.addEventListener('click', () => {
+					const userId = item.dataset.userId;
+					showUserProfile(userId);
+				});
+			});
+		}
+		
+		function loadRecommendedUsers() {
+			const container = document.getElementById('recommendedUsersList');
+			if (!container) return;
+			
+			// Рекомендуем пользователей, на которых не подписан текущий пользователь
+			const following = currentUser?.following || [];
+			const recommended = allUsers
+				.filter(user => 
+					user.id !== currentUser?.id && 
+					!following.includes(user.id)
+				)
+				.sort(() => Math.random() - 0.5)
+				.slice(0, 5);
+			
+			if (recommended.length === 0) {
+				container.innerHTML = '<div class="text-center text-muted py-3">Нет рекомендаций</div>';
+				return;
+			}
+			
+			container.innerHTML = recommended.map(user => `
+				<div class="recommended-user" data-user-id="${user.id}">
+					<div class="user-avatar">
+						<span>${user.emoji}</span>
+					</div>
+					<div class="recommended-user-info">
+						<div class="recommended-user-name">${user.username}</div>
+						<div class="recommended-user-bio">${user.description?.slice(0, 50) || 'Нет описания'}...</div>
+					</div>
+					<button class="btn btn-sm btn-primary follow-btn" data-user-id="${user.id}">
+						Подписаться
+					</button>
+				</div>
+			`).join('');
+			
+			// Добавляем обработчики
+			container.querySelectorAll('.recommended-user').forEach(item => {
+				item.addEventListener('click', (e) => {
+					if (!e.target.classList.contains('follow-btn')) {
+						const userId = item.dataset.userId;
+						showUserProfile(userId);
+					}
+				});
+			});
+			
+			container.querySelectorAll('.follow-btn').forEach(btn => {
+				btn.addEventListener('click', async (e) => {
+					e.stopPropagation();
+					const userId = btn.dataset.userId;
+					await toggleFollow(userId);
+				});
+			});
+		}
+		
+		function loadPopularGroups() {
+			const container = document.getElementById('popularGroupsList');
+			if (!container) return;
+			
+			const popular = allGroups
+				.sort((a, b) => (b.members_count || 0) - (a.members_count || 0))
+				.slice(0, 5);
+			
+			if (popular.length === 0) {
+				container.innerHTML = '<div class="text-center text-muted py-3">Нет групп</div>';
+				return;
+			}
+			
+			container.innerHTML = popular.map(group => `
+				<div class="online-user" data-group-id="${group.id}">
+					<div class="online-user-avatar">
+						<span>${group.avatar || '👥'}</span>
+					</div>
+					<div class="online-user-info">
+						<div class="online-user-name">${group.name}</div>
+						<div class="online-user-status">${group.members_count || 0} участников</div>
+					</div>
+				</div>
+			`).join('');
+			
+			// Добавляем обработчики кликов
+			container.querySelectorAll('.online-user[data-group-id]').forEach(item => {
+				item.addEventListener('click', () => {
+					const groupId = item.dataset.groupId;
+					showGroupInfo(groupId);
+				});
+			});
+		}
+		
+		// ========== РЕНДЕРИНГ ПОСТОВ ==========
+		function renderPosts(posts = allPosts) {
+			const container = document.getElementById('postsContainer');
+			const emptyFeed = document.getElementById('emptyFeed');
+			const loader = document.getElementById('postsLoader');
+			
+			if (!container) return;
+			
+			// Скрываем лоадер
+			if (loader) loader.classList.add('hidden');
+			
+			// Очищаем контейнер
+			container.innerHTML = '';
+			
+			if (posts.length === 0) {
+				if (emptyFeed) emptyFeed.classList.remove('hidden');
+				return;
+			}
+			
+			if (emptyFeed) emptyFeed.classList.add('hidden');
+			
+			// Рендерим посты
+			posts.forEach(post => {
+				const postElement = createPostElement(post);
+				container.appendChild(postElement);
+			});
+			
+			// Добавляем обработчики событий
+			addPostEventListeners();
+		}
+		
+		function createPostElement(post) {
+			const template = document.getElementById('postTemplate').innerHTML;
+			const user = post.user || allUsers.find(u => u.id === post.user_id);
+			const isLiked = post.likes?.includes(currentUser?.id) || false;
+			const isImage = post.file_url && /\.(jpg|jpeg|png|gif|webp)$/i.test(post.file_url);
+			
+			const html = template
+				.replace(/\{\{id\}\}/g, post.id)
+				.replace(/\{\{original_post_id\}\}/g, post.original_post_id || '')
+				.replace(/\{\{user\.username\}\}/g, user?.username || 'Неизвестно')
+				.replace(/\{\{user\.id\}\}/g, user?.id || '')
+				.replace(/\{\{user\.emoji\}\}/g, user?.emoji || '😀')
+				.replace(/\{\{user\.is_online\}\}/g, onlineUsers.has(user?.id) ? 'true' : '')
+				.replace(/\{\{user\.is_verified\}\}/g, user?.is_verified ? 'true' : '')
+				.replace(/\{\{created_at\}\}/g, post.created_at)
+				.replace(/\{\{timeAgo\}\}/g, formatTimeAgo(post.created_at))
+				.replace(/\{\{content\}\}/g, post.content || '')
+				.replace(/\{\{file_url\}\}/g, post.file_url || '')
+				.replace(/\{\{file_name\}\}/g, post.file_name || '')
+				.replace(/\{\{fileSize\}\}/g, formatFileSize(post.file_size || 0))
+				.replace(/\{\{isImage\}\}/g, isImage ? 'true' : '')
+				.replace(/\{\{voice_url\}\}/g, post.voice_url || '')
+				.replace(/\{\{voiceDuration\}\}/g, post.voice_duration ? `${Math.floor(post.voice_duration / 60)}:${(post.voice_duration % 60).toString().padStart(2, '0')}` : '0:00')
+				.replace(/\{\{original_post\}\}/g, post.original_post ? 'true' : '')
+				.replace(/\{\{liked\}\}/g, isLiked ? 'true' : '')
+				.replace(/\{\{likes_count\}\}/g, post.likes?.length || 0)
+				.replace(/\{\{comments_count\}\}/g, post.comments_count || 0)
+				.replace(/\{\{reposts_count\}\}/g, post.reposts_count || 0);
+			
+			const div = document.createElement('div');
+			div.innerHTML = html;
+			return div.firstElementChild;
+		}
+		
+		function addPostEventListeners() {
+			// Лайки
+			document.querySelectorAll('.like-btn').forEach(btn => {
+				btn.addEventListener('click', async () => {
+					const postId = btn.dataset.postId;
+					await toggleLike(postId);
+				});
+			});
+			
+			// Комментарии
+			document.querySelectorAll('.comment-btn').forEach(btn => {
+				btn.addEventListener('click', () => {
+					const postId = btn.dataset.postId;
+					const commentsSection = document.getElementById(`comments-${postId}`);
+					if (commentsSection) {
+						commentsSection.classList.toggle('hidden');
+						if (!commentsSection.classList.contains('hidden')) {
+							loadComments(postId);
+						}
+					}
+				});
+			});
+			
+			// Отправка комментариев
+			document.querySelectorAll('.send-comment-btn').forEach(btn => {
+				btn.addEventListener('click', async () => {
+					const postId = btn.dataset.postId;
+					const input = document.querySelector(`.comment-input[data-post-id="${postId}"]`);
+					if (input && input.value.trim()) {
+						await addComment(postId, input.value.trim());
+						input.value = '';
+					}
+				});
+			});
+			
+			// Репосты
+			document.querySelectorAll('.repost-btn').forEach(btn => {
+				btn.addEventListener('click', async () => {
+					const postId = btn.dataset.postId;
+					await createRepost(postId);
+				});
+			});
+			
+			// Просмотр профиля
+			document.querySelectorAll('.view-profile').forEach(el => {
+				el.addEventListener('click', () => {
+					const userId = el.dataset.userId;
+					if (userId) showUserProfile(userId);
+				});
+			});
+		}
+		
+		// ========== ВЗАИМОДЕЙСТВИЯ С ПОСТАМИ ==========
+		async function toggleLike(postId) {
+			if (!currentUser) {
+				showNotification('Ошибка', 'Войдите в систему', 'error');
+				return;
+			}
+			
+			try {
+				const post = allPosts.find(p => p.id === postId);
+				if (!post) return;
+				
+				const likes = post.likes || [];
+				const isLiked = likes.includes(currentUser.id);
+				
+				let newLikes;
+				if (isLiked) {
+					newLikes = likes.filter(id => id !== currentUser.id);
+				} else {
+					newLikes = [...likes, currentUser.id];
+				}
+				
+				const { error } = await supabase
+					.from('posts')
+					.update({ likes: newLikes })
+					.eq('id', postId);
+				
+				if (error) throw error;
+				
+				// Обновляем локально
+				post.likes = newLikes;
+				
+				// Обновляем интерфейс
+				const likeBtn = document.querySelector(`.like-btn[data-post-id="${postId}"]`);
+				const likeStat = document.querySelector(`.post-stat[data-action="like"][data-post-id="${postId}"]`);
+				
+				if (likeBtn) {
+					const icon = likeBtn.querySelector('i');
+					const text = likeBtn.querySelector('span');
+					if (isLiked) {
+						icon.className = 'far fa-heart';
+						text.textContent = 'Нравится';
+						likeBtn.classList.remove('active');
+					} else {
+						icon.className = 'fas fa-heart';
+						text.textContent = 'Не нравится';
+						likeBtn.classList.add('active');
+					}
+				}
+				
+				if (likeStat) {
+					const count = likeStat.querySelector('span');
+					const icon = likeStat.querySelector('i');
+					count.textContent = newLikes.length;
+					if (isLiked) {
+						likeStat.classList.remove('liked');
+						icon.className = 'far fa-heart';
+					} else {
+						likeStat.classList.add('liked');
+						icon.className = 'fas fa-heart';
+					}
+				}
+				
+				// Отправляем уведомление
+				if (!isLiked && post.user_id !== currentUser.id) {
+					await createNotification(post.user_id, 'like', postId);
+				}
+				
+			} catch (error) {
+				console.error('Ошибка лайка:', error);
+				showNotification('Ошибка', 'Не удалось поставить лайк', 'error');
+			}
+		}
+		
+		async function addComment(postId, content) {
+			if (!currentUser) {
+				showNotification('Ошибка', 'Войдите в систему', 'error');
+				return;
+			}
+			
+			try {
+				// Получаем текущие комментарии
+				const post = allPosts.find(p => p.id === postId);
+				if (!post) return;
+				
+				const comments = post.comments || [];
+				const newComment = {
+					id: Date.now().toString(),
+					user_id: currentUser.id,
+					user: {
+						id: currentUser.id,
+						username: currentUser.username,
+						emoji: currentUser.emoji,
+						is_verified: currentUser.is_verified
+					},
+					content,
+					created_at: new Date().toISOString()
+				};
+				
+				// Обновляем в базе
+				const { error } = await supabase
+					.from('posts')
+					.update({ 
+						comments: [...comments, newComment],
+						comments_count: (post.comments_count || 0) + 1
+					})
+					.eq('id', postId);
+				
+				if (error) throw error;
+				
+				// Обновляем локально
+				post.comments = [...comments, newComment];
+				post.comments_count = (post.comments_count || 0) + 1;
+				
+				// Обновляем интерфейс
+				const commentsList = document.getElementById(`comments-list-${postId}`);
+				if (commentsList) {
+					const template = document.getElementById('commentTemplate').innerHTML;
+					const html = template
+						.replace(/\{\{id\}\}/g, newComment.id)
+						.replace(/\{\{user\.id\}\}/g, newComment.user.id)
+						.replace(/\{\{user\.username\}\}/g, newComment.user.username)
+						.replace(/\{\{user\.emoji\}\}/g, newComment.user.emoji)
+						.replace(/\{\{timeAgo\}\}/g, 'только что')
+						.replace(/\{\{content\}\}/g, newComment.content);
+					
+					commentsList.insertAdjacentHTML('beforeend', html);
+					
+					// Добавляем обработчик клика на профиль
+					const newCommentEl = commentsList.lastElementChild;
+					newCommentEl.querySelectorAll('.view-profile').forEach(el => {
+						el.addEventListener('click', () => {
+							const userId = el.dataset.userId;
+							if (userId) showUserProfile(userId);
+						});
+					});
+				}
+				
+				// Обновляем счетчик комментариев
+				const commentStat = document.querySelector(`.post-stat[data-action="comment"][data-post-id="${postId}"] span`);
+				if (commentStat) {
+					commentStat.textContent = post.comments_count;
+				}
+				
+				// Отправляем уведомление
+				if (post.user_id !== currentUser.id) {
+					await createNotification(post.user_id, 'comment', postId);
+				}
+				
+			} catch (error) {
+				console.error('Ошибка комментария:', error);
+				showNotification('Ошибка', 'Не удалось добавить комментарий', 'error');
+			}
+		}
+		
+		async function loadComments(postId) {
+			const post = allPosts.find(p => p.id === postId);
+			if (!post || !post.comments) return;
+			
+			const container = document.getElementById(`comments-list-${postId}`);
+			if (!container) return;
+			
+			container.innerHTML = '';
+			
+			post.comments.forEach(comment => {
+				const template = document.getElementById('commentTemplate').innerHTML;
+				const html = template
+					.replace(/\{\{id\}\}/g, comment.id || Date.now())
+					.replace(/\{\{user\.id\}\}/g, comment.user_id || comment.user?.id)
+					.replace(/\{\{user\.username\}\}/g, comment.user?.username || 'Неизвестно')
+					.replace(/\{\{user\.emoji\}\}/g, comment.user?.emoji || '😀')
+					.replace(/\{\{timeAgo\}\}/g, formatTimeAgo(comment.created_at))
+					.replace(/\{\{content\}\}/g, comment.content);
+				
+				container.insertAdjacentHTML('beforeend', html);
+			});
+			
+			// Добавляем обработчики клика на профиль
+			container.querySelectorAll('.view-profile').forEach(el => {
+				el.addEventListener('click', () => {
+					const userId = el.dataset.userId;
+					if (userId) showUserProfile(userId);
+				});
+			});
+		}
+		
+		async function createRepost(postId) {
+			if (!currentUser) {
+				showNotification('Ошибка', 'Войдите в систему', 'error');
+				return;
+			}
+			
+			try {
+				const originalPost = allPosts.find(p => p.id === postId);
+				if (!originalPost) return;
+				
+				const { data: newPost, error } = await supabase
+					.from('posts')
+					.insert([{
+						user_id: currentUser.id,
+						content: '',
+						original_post_id: postId,
+						likes: [],
+						comments: [],
+						comments_count: 0,
+						reposts_count: 0
+					}])
+					.select()
+					.single();
+				
+				if (error) throw error;
+				
+				// Увеличиваем счетчик репостов у оригинального поста
+				await supabase
+					.from('posts')
+					.update({ 
+						reposts_count: (originalPost.reposts_count || 0) + 1 
+					})
+					.eq('id', postId);
+				
+				// Обновляем локально
+				originalPost.reposts_count = (originalPost.reposts_count || 0) + 1;
+				newPost.user = currentUser;
+				newPost.original_post = originalPost;
+				allPosts.unshift(newPost);
+				
+				// Обновляем интерфейс
+				renderPosts(allPosts);
+				
+				// Отправляем уведомление
+				if (originalPost.user_id !== currentUser.id) {
+					await createNotification(originalPost.user_id, 'repost', postId);
+				}
+				
+				showNotification('Успех', 'Пост репостнут!', 'success');
+				
+			} catch (error) {
+				console.error('Ошибка репоста:', error);
+				showNotification('Ошибка', 'Не удалось сделать репост', 'error');
+			}
+		}
+		
+		// ========== СОЗДАНИЕ ПОСТА ==========
+		async function createPost(content, attachments = {}) {
+			if (!currentUser) {
+				showNotification('Ошибка', 'Войдите в систему', 'error');
+				return false;
+			}
+			
+			try {
+				const postData = {
+					user_id: currentUser.id,
+					content: content.trim(),
+					likes: [],
+					comments: [],
+					comments_count: 0,
+					reposts_count: 0
+				};
+				
+				// Добавляем вложения если есть
+				if (attachments.file) {
+					postData.file_url = attachments.file.url;
+					postData.file_name = attachments.file.name;
+					postData.file_size = attachments.file.size;
+				}
+				
+				if (attachments.voice) {
+					postData.voice_url = attachments.voice.url;
+					postData.voice_duration = attachments.voice.duration;
+				}
+				
+				const { data: newPost, error } = await supabase
+					.from('posts')
+					.insert([postData])
+					.select(`
+						*,
+						user:users(*)
+					`)
+					.single();
+				
+				if (error) throw error;
+				
+				// Обновляем счетчик постов у пользователя
+				currentUser.posts_count = (currentUser.posts_count || 0) + 1;
+				await supabase
+					.from('users')
+					.update({ posts_count: currentUser.posts_count })
+					.eq('id', currentUser.id);
+				
+				// Обновляем локально
+				allPosts.unshift(newPost);
+				
+				// Обновляем интерфейс
+				updateUI();
+				renderPosts(allPosts);
+				
+				// Очищаем форму
+				document.getElementById('postText').value = '';
+				const attachmentsContainer = document.getElementById('postAttachments');
+				if (attachmentsContainer) {
+					attachmentsContainer.innerHTML = '';
+					attachmentsContainer.classList.add('hidden');
+				}
+				
+				showNotification('Успех', 'Пост опубликован!', 'success');
+				return true;
+				
+			} catch (error) {
+				console.error('Ошибка создания поста:', error);
+				showNotification('Ошибка', 'Не удалось опубликовать пост', 'error');
+				return false;
+			}
+		}
+		
+		// ========== УПРАВЛЕНИЕ ПРОФИЛЕМ ==========
+		async function showUserProfile(userId) {
+			try {
+				let user = allUsers.find(u => u.id === userId);
+				if (!user) {
+					// Если пользователя нет в локальном кэше, загружаем из базы
+					const { data, error } = await supabase
+						.from('users')
+						.select('*')
+						.eq('id', userId)
+						.single();
+					
+					if (error) throw error;
+					
+					user = data;
+					allUsers.push(user);
+				}
+				
+				// Загружаем посты пользователя
+				const { data: userPosts, error: postsError } = await supabase
+					.from('posts')
+					.select(`
+						*,
+						user:users(*),
+						original_post:posts(*, user:users(*))
+					`)
+					.eq('user_id', userId)
+					.order('created_at', { ascending: false });
+				
+				if (postsError) throw postsError;
+				
+				// Загружаем репосты пользователя
+				const reposts = userPosts.filter(p => p.original_post_id);
+				
+				// Подготавливаем данные для шаблона
+				const isOwnProfile = currentUser && currentUser.id === userId;
+				const isFollowing = currentUser?.following?.includes(userId) || false;
+				
+				const profileData = {
+					...user,
+					is_own_profile: isOwnProfile,
+					is_following: isFollowing,
+					is_online: onlineUsers.has(userId),
+					posts_count: user.posts_count || 0,
+					followers_count: user.followers_count || 0,
+					following_count: user.following_count || 0,
+					reposts_count: reposts.length,
+					description: user.description || 'Пользователь пока ничего не написал в описании'
+				};
+				
+				// Рендерим профиль
+				const template = document.getElementById('profileTemplate').innerHTML;
+				let html = template;
+				
+				// Заменяем все переменные в шаблоне
+				Object.keys(profileData).forEach(key => {
+					html = html.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), profileData[key]);
+				});
+				
+				// Показываем страницу профиля
+				const profilePage = document.getElementById('profilePage');
+				const container = profilePage.querySelector('.container');
+				
+				container.innerHTML = html;
+				profilePage.classList.remove('hidden');
+				hideAllPages();
+				profilePage.classList.add('active');
+				
+				// Рендерим посты пользователя
+				const postsContainer = document.getElementById('profilePostsContainer');
+				if (postsContainer && userPosts.length > 0) {
+					postsContainer.innerHTML = '';
+					userPosts.forEach(post => {
+						if (!post.original_post_id) { // Только оригинальные посты
+							const postElement = createPostElement(post);
+							postsContainer.appendChild(postElement);
+						}
+					});
+					addPostEventListeners();
+				}
+				
+				// Рендерим репосты
+				const repostsContainer = document.getElementById('profileRepostsContainer');
+				if (repostsContainer && reposts.length > 0) {
+					repostsContainer.innerHTML = '';
+					reposts.forEach(post => {
+						const postElement = createPostElement(post);
+						repostsContainer.appendChild(postElement);
+					});
+					addPostEventListeners();
+				}
+				
+				// Добавляем обработчики событий
+				setupProfileEventListeners(userId, isOwnProfile);
+				
+				// Устанавливаем активную навигацию
+				setActiveNav(null);
+				
+			} catch (error) {
+				console.error('Ошибка загрузки профиля:', error);
+				showNotification('Ошибка', 'Не удалось загрузить профиль', 'error');
+				showPage('feed');
+			}
+		}
+		
+		function setupProfileEventListeners(userId, isOwnProfile) {
+			// Кнопка подписки
+			const followBtn = document.querySelector('.follow-btn');
+			if (followBtn && !isOwnProfile) {
+				followBtn.addEventListener('click', async () => {
+					await toggleFollow(userId);
+				});
+			}
+			
+			// Кнопка редактирования
+			const editBtn = document.querySelector('#profileEditBtn');
+			if (editBtn && isOwnProfile) {
+				editBtn.addEventListener('click', () => {
+					showEditProfileModal();
+				});
+			}
+			
+			// Кнопка сообщения
+			const messageBtn = document.querySelector('.message-btn');
+			if (messageBtn && !isOwnProfile) {
+				messageBtn.addEventListener('click', () => {
+					startConversation(userId);
+				});
+			}
+			
+			// Табы профиля
+			document.querySelectorAll('.tab[data-tab]').forEach(tab => {
+				tab.addEventListener('click', () => {
+					const tabName = tab.dataset.tab;
+					switch (tabName) {
+						case 'followers':
+							loadFollowers(userId);
+							break;
+						case 'following':
+							loadFollowing(userId);
+							break;
+						case 'media':
+							loadMedia(userId);
+							break;
+					}
+					
+					// Активируем таб
+					document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+					document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+					tab.classList.add('active');
+					document.getElementById(`profile${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Tab`).classList.add('active');
+				});
+			});
+		}
+		
+		async function toggleFollow(userId) {
+			if (!currentUser) {
+				showNotification('Ошибка', 'Войдите в систему', 'error');
+				return;
+			}
+			
+			try {
+				const userToFollow = allUsers.find(u => u.id === userId);
+				if (!userToFollow) return;
+				
+				const following = currentUser.following || [];
+				const isFollowing = following.includes(userId);
+				
+				let newFollowing;
+				if (isFollowing) {
+					newFollowing = following.filter(id => id !== userId);
+				} else {
+					newFollowing = [...following, userId];
+				}
+				
+				// Обновляем в базе
+				const { error } = await supabase
+					.from('users')
+					.update({ following: newFollowing })
+					.eq('id', currentUser.id);
+				
+				if (error) throw error;
+				
+				// Обновляем локально
+				currentUser.following = newFollowing;
+				currentUser.following_count = newFollowing.length;
+				
+				// Обновляем счетчик подписчиков у другого пользователя
+				const followers = userToFollow.followers || [];
+				let newFollowers;
+				if (isFollowing) {
+					newFollowers = followers.filter(id => id !== currentUser.id);
+				} else {
+					newFollowers = [...followers, currentUser.id];
+				}
+				
+				await supabase
+					.from('users')
+					.update({ 
+						followers: newFollowers,
+						followers_count: newFollowers.length
+					})
+					.eq('id', userId);
+				
+				// Обновляем локально
+				userToFollow.followers = newFollowers;
+				userToFollow.followers_count = newFollowers.length;
+				
+				// Обновляем интерфейс
+				updateUI();
+				
+				// Обновляем кнопку подписки
+				const followBtn = document.querySelector(`.follow-btn[data-user-id="${userId}"]`);
+				if (followBtn) {
+					if (isFollowing) {
+						followBtn.innerHTML = '<i class="fas fa-user-plus"></i> Подписаться';
+						followBtn.classList.remove('btn-danger');
+						followBtn.classList.add('btn-primary');
+					} else {
+						followBtn.innerHTML = '<i class="fas fa-user-minus"></i> Отписаться';
+						followBtn.classList.remove('btn-primary');
+						followBtn.classList.add('btn-danger');
+					}
+				}
+				
+				// Обновляем счетчики в профиле
+				const followersCount = document.querySelector(`.followers-count[data-user-id="${userId}"]`);
+				if (followersCount) {
+					followersCount.textContent = userToFollow.followers_count;
+				}
+				
+				const followingCount = document.querySelector(`.following-count[data-user-id="${userId}"]`);
+				if (followingCount) {
+					followingCount.textContent = currentUser.following_count;
+				}
+				
+				// Отправляем уведомление
+				if (!isFollowing) {
+					await createNotification(userId, 'follow');
+				}
+				
+				showNotification('Успех', 
+					isFollowing ? 'Вы отписались' : 'Вы подписались', 
+					'success');
+				
+			} catch (error) {
+				console.error('Ошибка подписки:', error);
+				showNotification('Ошибка', 'Не удалось выполнить действие', 'error');
+			}
+		}
+		
+		// ========== УПРАВЛЕНИЕ ГРУППАМИ ==========
+		async function createGroup(groupData) {
+			if (!currentUser) {
+				showNotification('Ошибка', 'Войдите в систему', 'error');
+				return false;
+			}
+			
+			try {
+				const { data: newGroup, error } = await supabase
+					.from('groups')
+					.insert([{
+						...groupData,
+						creator_id: currentUser.id,
+						members: [currentUser.id],
+						members_count: 1,
+						created_at: new Date().toISOString(),
+						updated_at: new Date().toISOString()
+					}])
+					.select()
+					.single();
+				
+				if (error) throw error;
+				
+				// Обновляем локально
+				allGroups.unshift(newGroup);
+				
+				// Обновляем интерфейс
+				loadPopularGroups();
+				
+				showNotification('Успех', 'Группа создана!', 'success');
+				return true;
+				
+			} catch (error) {
+				console.error('Ошибка создания группы:', error);
+				showNotification('Ошибка', 'Не удалось создать группу', 'error');
+				return false;
+			}
+		}
+		
+		async function joinGroup(groupId) {
+			if (!currentUser) {
+				showNotification('Ошибка', 'Войдите в систему', 'error');
+				return false;
+			}
+			
+			try {
+				const group = allGroups.find(g => g.id === groupId);
+				if (!group) return false;
+				
+				const members = group.members || [];
+				if (members.includes(currentUser.id)) {
+					showNotification('Информация', 'Вы уже в группе', 'info');
+					return false;
+				}
+				
+				const newMembers = [...members, currentUser.id];
+				
+				const { error } = await supabase
+					.from('groups')
+					.update({ 
+						members: newMembers,
+						members_count: newMembers.length
+					})
+					.eq('id', groupId);
+				
+				if (error) throw error;
+				
+				// Обновляем локально
+				group.members = newMembers;
+				group.members_count = newMembers.length;
+				
+				showNotification('Успех', 'Вы вступили в группу!', 'success');
+				return true;
+				
+			} catch (error) {
+				console.error('Ошибка вступления в группу:', error);
+				showNotification('Ошибка', 'Не удалось вступить в группу', 'error');
+				return false;
+			}
+		}
+		
+		// ========== ЛИЧНЫЕ СООБЩЕНИЯ ==========
+		async function startConversation(userId) {
+			if (!currentUser) return;
+			
+			try {
+				// Ищем существующий диалог
+				const existingConversation = conversations.find(conv => 
+					!conv.is_group && 
+					conv.participants.includes(currentUser.id) && 
+					conv.participants.includes(userId)
+				);
+				
+				if (existingConversation) {
+					// Открываем существующий диалог
+					openConversation(existingConversation.id);
+				} else {
+					// Создаем новый диалог
+					const otherUser = allUsers.find(u => u.id === userId);
+					if (!otherUser) return;
+					
+					const { data: newConversation, error } = await supabase
+						.from('conversations')
+						.insert([{
+							name: otherUser.username,
+							avatar: otherUser.emoji,
+							is_group: false,
+							participants: [currentUser.id, userId],
+							last_message: '',
+							last_message_time: new Date().toISOString()
+						}])
+						.select()
+						.single();
+					
+					if (error) throw error;
+					
+					conversations.unshift(newConversation);
+					openConversation(newConversation.id);
+				}
+				
+				// Переходим на страницу сообщений
+				showPage('messages');
+				
+			} catch (error) {
+				console.error('Ошибка создания диалога:', error);
+				showNotification('Ошибка', 'Не удалось начать диалог', 'error');
+			}
+		}
+		
+		async function openConversation(conversationId) {
+			try {
+				const conversation = conversations.find(c => c.id === conversationId);
+				if (!conversation) return;
+				
+				currentConversation = conversation;
+				
+				// Загружаем сообщения
+				const { data: messages, error } = await supabase
+					.from('messages')
+					.select('*')
+					.eq('conversation_id', conversationId)
+					.order('created_at', { ascending: true });
+				
+				if (error) throw error;
+				
+				currentMessages = messages || [];
+				
+				// Рендерим сообщения
+				renderMessages();
+				
+				// Помечаем диалог как активный
+				document.querySelectorAll('.conversation-item').forEach(item => {
+					item.classList.remove('active');
+				});
+				const activeItem = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
+				if (activeItem) {
+					activeItem.classList.add('active');
+				}
+				
+			} catch (error) {
+				console.error('Ошибка загрузки сообщений:', error);
+				showNotification('Ошибка', 'Не удалось загрузить сообщения', 'error');
+			}
+		}
+		
+		function renderMessages() {
+			const container = document.querySelector('.messages-list');
+			if (!container) return;
+			
+			container.innerHTML = '';
+			
+			currentMessages.forEach(message => {
+				const template = document.getElementById('messageTemplate').innerHTML;
+				const isOutgoing = message.sender_id === currentUser.id;
+				
+				const html = template
+					.replace(/\{\{id\}\}/g, message.id)
+					.replace(/\{\{outgoing\}\}/g, isOutgoing ? 'true' : '')
+					.replace(/\{\{content\}\}/g, message.content || '')
+					.replace(/\{\{file_url\}\}/g, message.file_url || '')
+					.replace(/\{\{file_name\}\}/g, message.file_name || '')
+					.replace(/\{\{created_at\}\}/g, formatTimeAgo(message.created_at));
+				
+				container.insertAdjacentHTML('beforeend', html);
+			});
+			
+			// Прокручиваем вниз
+			container.scrollTop = container.scrollHeight;
+		}
+		
+		async function sendMessage(content, attachments = {}) {
+			if (!currentUser || !currentConversation) return;
+			
+			try {
+				const messageData = {
+					conversation_id: currentConversation.id,
+					sender_id: currentUser.id,
+					content: content.trim(),
+					created_at: new Date().toISOString()
+				};
+				
+				// Добавляем вложения если есть
+				if (attachments.file) {
+					messageData.file_url = attachments.file.url;
+					messageData.file_name = attachments.file.name;
+					messageData.file_size = attachments.file.size;
+				}
+				
+				if (attachments.voice) {
+					messageData.voice_url = attachments.voice.url;
+					messageData.voice_duration = attachments.voice.duration;
+				}
+				
+				const { data: newMessage, error } = await supabase
+					.from('messages')
+					.insert([messageData])
+					.select()
+					.single();
+				
+				if (error) throw error;
+				
+				// Обновляем локально
+				currentMessages.push(newMessage);
+				
+				// Обновляем последнее сообщение в диалоге
+				await supabase
+					.from('conversations')
+					.update({
+						last_message: content.slice(0, 50) + (content.length > 50 ? '...' : ''),
+						last_message_time: new Date().toISOString()
+					})
+					.eq('id', currentConversation.id);
+				
+				// Обновляем интерфейс
+				renderMessages();
+				
+				// Очищаем поле ввода
+				const messageInput = document.querySelector('.message-input');
+				if (messageInput) messageInput.value = '';
+				
+				return true;
+				
+			} catch (error) {
+				console.error('Ошибка отправки сообщения:', error);
+				showNotification('Ошибка', 'Не удалось отправить сообщение', 'error');
+				return false;
+			}
+		}
+		
+		// ========== АДМИН ПАНЕЛЬ ==========
+		async function loadAdminPanel() {
+			if (!currentUser || currentUser.username !== '@onegin') {
+				showNotification('Ошибка', 'Доступ запрещен', 'error');
+				showPage('feed');
+				return;
+			}
+			
+			try {
+				// Загружаем статистику
+				const totalUsers = allUsers.length;
+				const onlineUsersCount = onlineUsers.size;
+				const totalPosts = allPosts.length;
+				const totalGroups = allGroups.length;
+				
+				document.getElementById('adminTotalUsers').textContent = totalUsers;
+				document.getElementById('adminOnlineUsers').textContent = onlineUsersCount;
+				document.getElementById('adminTotalPosts').textContent = totalPosts;
+				document.getElementById('adminTotalGroups').textContent = totalGroups;
+				
+				// Загружаем пользователей для верификации
+				const usersToVerify = allUsers.filter(u => !u.is_verified).slice(0, 20);
+				
+				const usersList = document.getElementById('adminUsersList');
+				if (usersList) {
+					usersList.innerHTML = usersToVerify.map(user => `
+						<div class="admin-user-item">
+							<div class="user-avatar">
+								<span>${user.emoji}</span>
+							</div>
+							<div class="admin-user-info">
+								<div class="admin-user-name">
+									${user.username}
+									<span class="text-muted">(${user.display_name})</span>
+								</div>
+								<div class="admin-user-meta">
+									Постов: ${user.posts_count || 0} • 
+									Подписчиков: ${user.followers_count || 0}
+								</div>
+							</div>
+							<button class="btn btn-success verify-user-btn" data-user-id="${user.id}">
+								<i class="fas fa-check"></i> Верифицировать
+							</button>
+						</div>
+					`).join('');
+					
+					// Добавляем обработчики
+					usersList.querySelectorAll('.verify-user-btn').forEach(btn => {
+						btn.addEventListener('click', async () => {
+							const userId = btn.dataset.userId;
+							await verifyUser(userId);
+						});
+					});
+				}
+				
+			} catch (error) {
+				console.error('Ошибка загрузки админ панели:', error);
+				showNotification('Ошибка', 'Не удалось загрузить админ панель', 'error');
+			}
+		}
+		
+		async function verifyUser(userId) {
+			try {
+				const { error } = await supabase
+					.from('users')
+					.update({ is_verified: true })
+					.eq('id', userId);
+				
+				if (error) throw error;
+				
+				// Обновляем локально
+				const user = allUsers.find(u => u.id === userId);
+				if (user) {
+					user.is_verified = true;
+				}
+				
+				// Обновляем интерфейс
+				loadAdminPanel();
+				updateUI();
+				
+				showNotification('Успех', 'Пользователь верифицирован', 'success');
+				
+			} catch (error) {
+				console.error('Ошибка верификации:', error);
+				showNotification('Ошибка', 'Не удалось верифицировать пользователя', 'error');
+			}
+		}
+		
+		// ========== УПРАВЛЕНИЕ УВЕДОМЛЕНИЯМИ ==========
+		async function createNotification(userId, type, postId = null) {
+			try {
+				let message = '';
+				switch (type) {
+					case 'like':
+						message = `${currentUser.username} поставил(а) лайк вашему посту`;
+						break;
+					case 'comment':
+						message = `${currentUser.username} прокомментировал(а) ваш пост`;
+						break;
+					case 'repost':
+						message = `${currentUser.username} репостнул(а) ваш пост`;
+						break;
+					case 'follow':
+						message = `${currentUser.username} подписался(ась) на вас`;
+						break;
+				}
+				
+				const { error } = await supabase
+					.from('notifications')
+					.insert([{
+						user_id: userId,
+						from_user_id: currentUser.id,
+						post_id: postId,
+						type,
+						message,
+						is_read: false,
+						created_at: new Date().toISOString()
+					}]);
+				
+				if (error) throw error;
+				
+			} catch (error) {
+				console.error('Ошибка создания уведомления:', error);
+			}
+		}
+		
+		function renderNotifications() {
+			const container = document.getElementById('notificationsList');
+			if (!container) return;
+			
+			if (notifications.length === 0) {
+				container.innerHTML = '<div class="text-center py-5 text-muted">Нет уведомлений</div>';
+				return;
+			}
+			
+			container.innerHTML = notifications.map(notification => `
+				<div class="notification-item ${notification.is_read ? '' : 'unread'}" data-notification-id="${notification.id}">
+					<div class="d-flex align-start gap-3 p-3 border-bottom">
+						<div class="user-avatar">
+							<span>${allUsers.find(u => u.id === notification.from_user_id)?.emoji || '😀'}</span>
+						</div>
+						<div class="flex-1">
+							<div class="mb-1">${notification.message}</div>
+							<div class="text-muted small">${formatTimeAgo(notification.created_at)}</div>
+						</div>
+						${!notification.is_read ? '<span class="badge">новое</span>' : ''}
+					</div>
+				</div>
+			`).join('');
+			
+			// Добавляем обработчики
+			container.querySelectorAll('.notification-item').forEach(item => {
+				item.addEventListener('click', async () => {
+					const notificationId = item.dataset.notificationId;
+					await markNotificationAsRead(notificationId);
+				});
+			});
+		}
+		
+		async function markNotificationAsRead(notificationId) {
+			try {
+				const { error } = await supabase
+					.from('notifications')
+					.update({ is_read: true })
+					.eq('id', notificationId);
+				
+				if (error) throw error;
+				
+				// Обновляем локально
+				const notification = notifications.find(n => n.id === notificationId);
+				if (notification) {
+					notification.is_read = true;
+				}
+				
+				// Обновляем интерфейс
+				loadNotifications();
+				
+			} catch (error) {
+				console.error('Ошибка обновления уведомления:', error);
+			}
+		}
+		
+		// ========== УПРАВЛЕНИЕ СТРАНИЦАМИ ==========
+		function showPage(pageName) {
+			// Скрываем все страницы
+			hideAllPages();
+			
+			// Убираем активный класс у всех навигационных ссылок
+			document.querySelectorAll('.nav-link').forEach(link => {
+				link.classList.remove('active');
+			});
+			
+			// Показываем нужную страницу
+			switch (pageName) {
+				case 'feed':
+					document.getElementById('mainApp').classList.remove('hidden');
+					document.getElementById('navFeed').classList.add('active');
+					renderPosts();
+					break;
+					
+				case 'profile':
+					// Профиль открывается через showUserProfile
+					break;
+					
+				case 'messages':
+					document.getElementById('messagesPage').classList.remove('hidden');
+					document.getElementById('navMessages').classList.add('active');
+					renderConversations();
+					break;
+					
+				case 'groups':
+					document.getElementById('groupsPage').classList.remove('hidden');
+					document.getElementById('navGroups').classList.add('active');
+					renderGroups();
+					break;
+					
+				case 'notifications':
+					document.getElementById('notificationsPage').classList.remove('hidden');
+					document.getElementById('navNotifications').classList.add('active');
+					renderNotifications();
+					break;
+					
+				case 'admin':
+					document.getElementById('adminPage').classList.remove('hidden');
+					document.getElementById('navAdmin').classList.add('active');
+					loadAdminPanel();
+					break;
+			}
+		}
+		
+		function hideAllPages() {
+			document.getElementById('mainApp').classList.add('hidden');
+			document.getElementById('profilePage').classList.add('hidden');
+			document.getElementById('messagesPage').classList.add('hidden');
+			document.getElementById('groupsPage').classList.add('hidden');
+			document.getElementById('notificationsPage').classList.add('hidden');
+			document.getElementById('adminPage').classList.add('hidden');
+		}
+		
+		function setActiveNav(page) {
+			document.querySelectorAll('.nav-link').forEach(link => {
+				link.classList.remove('active');
+			});
+			
+			if (page) {
+				const navLink = document.getElementById(`nav${page.charAt(0).toUpperCase() + page.slice(1)}`);
+				if (navLink) navLink.classList.add('active');
+			}
+		}
+		
+		// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+		function populateEmojiSelectors() {
+			// Заполняем все селекторы эмодзи
+			const selectors = [
+				'registerEmojiSelector',
+				'clanEmojiSelector',
+				'editEmojiSelector',
+				'groupEmojiSelector'
+			];
+			
+			selectors.forEach(selectorId => {
+				const container = document.getElementById(selectorId);
+				if (container) {
+					container.innerHTML = '';
+					emojis.forEach(emoji => {
+						const div = document.createElement('div');
+						div.className = 'emoji-option';
+						div.textContent = emoji;
+						div.addEventListener('click', () => {
+							// Снимаем выделение со всех
+							container.querySelectorAll('.emoji-option').forEach(opt => {
+								opt.classList.remove('selected');
+							});
+							// Выделяем выбранный
+							div.classList.add('selected');
+							// Обновляем соответствующее скрытое поле
+							const hiddenInput = document.getElementById(selectorId.replace('Selector', ''));
+							if (hiddenInput) hiddenInput.value = emoji;
+						});
+						container.appendChild(div);
+					});
+					
+					// Выбираем первый эмодзи по умолчанию
+					if (container.firstChild) {
+						container.firstChild.classList.add('selected');
+					}
+				}
+			});
+		}
+		
+		function setupModal(modalId, openBtnId = null, closeBtnId = null) {
+			const modal = document.getElementById(modalId);
+			if (!modal) return;
+			
+			// Открытие модалки
+			if (openBtnId) {
+				const openBtn = document.getElementById(openBtnId);
+				if (openBtn) {
+					openBtn.addEventListener('click', () => {
+						modal.classList.add('active');
+					});
+				}
+			}
+			
+			// Закрытие модалки
+			if (closeBtnId) {
+				const closeBtn = document.getElementById(closeBtnId);
+				if (closeBtn) {
+					closeBtn.addEventListener('click', () => {
+						modal.classList.remove('active');
+					});
+				}
+			}
+			
+			// Закрытие по клику на оверлей
+			modal.addEventListener('click', (e) => {
+				if (e.target === modal) {
+					modal.classList.remove('active');
+				}
+			});
+		}
+		
+		function showEditProfileModal() {
+			const modal = document.getElementById('editProfileModal');
+			if (!modal) return;
+			
+			// Заполняем поля текущими данными
+			document.getElementById('editDisplayName').value = currentUser.display_name;
+			document.getElementById('editBio').value = currentUser.description || '';
+			document.getElementById('editStatus').value = currentUser.status || '';
+			document.getElementById('editEmoji').value = currentUser.emoji;
+			
+			// Выбираем текущий эмодзи
+			const emojiSelector = document.getElementById('editEmojiSelector');
+			if (emojiSelector) {
+				emojiSelector.querySelectorAll('.emoji-option').forEach(opt => {
+					opt.classList.remove('selected');
+					if (opt.textContent === currentUser.emoji) {
+						opt.classList.add('selected');
+					}
+				});
+			}
+			
+			modal.classList.add('active');
+		}
+		
+		// ========== ИНИЦИАЛИЗАЦИЯ ==========
+		async function initApp() {
+			// Проверяем сохраненного пользователя
+			const savedUser = localStorage.getItem('mirror_user');
+			if (savedUser) {
+				try {
+					currentUser = JSON.parse(savedUser);
+					await loadInitialData();
+					showMainApp();
+					return;
+				} catch (error) {
+					console.error('Ошибка загрузки пользователя:', error);
+					localStorage.removeItem('mirror_user');
+				}
+			}
+			
+			// Показываем форму авторизации
+			showAuthPage();
+		}
+		
+		function showMainApp() {
+			document.getElementById('authPage').classList.add('hidden');
+			document.getElementById('mainApp').classList.remove('hidden');
+			
+			// Обновляем интерфейс
+			updateUI();
+			
+			// Рендерим посты
+			renderPosts();
+			
+			// Показываем ленту
+			showPage('feed');
+		}
+		
+		function showAuthPage() {
+			document.getElementById('authPage').classList.remove('hidden');
+			document.getElementById('mainApp').classList.add('hidden');
+		}
+		
+		// ========== ОБРАБОТЧИКИ СОБЫТИЙ ==========
+		document.addEventListener('DOMContentLoaded', async () => {
+			// Инициализируем селекторы эмодзи
+			populateEmojiSelectors();
+			
+			// Настраиваем модальные окна
+			setupModal('clanModal', null, 'closeClanModal');
+			setupModal('editProfileModal', 'editProfileBtn', 'closeEditProfileModal');
+			setupModal('createGroupModal', 'createGroupBtn', 'closeCreateGroupModal');
+			setupModal('voiceModal', 'addVoiceBtn', 'closeVoiceModal');
+			setupModal('fileModal', 'addFileBtn', 'closeFileModal');
+			
+			// Авторизация
+			document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
+				e.preventDefault();
+				const username = document.getElementById('loginUsername').value.trim();
+				const password = document.getElementById('loginPassword').value;
+				
+				// Для демо - проверяем хардкод
+				if (username === '@onegin' && password === 'admin123') {
+					currentUser = {
+						id: 'demo-onegin',
+						username: '@onegin',
+						display_name: 'Евгений Онегин',
+						emoji: '👑',
+						description: 'Владелец социальной сети "Зеркало"',
+						is_verified: true,
+						posts_count: 5,
+						followers_count: 1000,
+						following_count: 50,
+						following: [],
+						clan: '👑'
+					};
+					
+					localStorage.setItem('mirror_user', JSON.stringify(currentUser));
+					await loadInitialData();
+					showMainApp();
+					return;
+				}
+				
+				// Поиск пользователя в базе данных
+				try {
+					const { data: user, error } = await supabase
+						.from('users')
+						.select('*')
+						.or(`username.eq.${username},email.eq.${username}`)
+						.eq('password_hash', password)
+						.single();
+					
+					if (error || !user) {
+						showNotification('Ошибка', 'Неверные данные для входа', 'error');
+						return;
+					}
+					
+					currentUser = user;
+					localStorage.setItem('mirror_user', JSON.stringify(currentUser));
+					await loadInitialData();
+					showMainApp();
+					
+				} catch (error) {
+					console.error('Ошибка входа:', error);
+					showNotification('Ошибка', 'Произошла ошибка при входе', 'error');
+				}
+			});
+			
+			// Регистрация
+			document.getElementById('registerForm')?.addEventListener('submit', async (e) => {
+				e.preventDefault();
+				
+				const username = document.getElementById('regUsername').value.trim();
+				const displayName = document.getElementById('regDisplayName').value.trim();
+				const email = document.getElementById('regEmail').value.trim();
+				const description = document.getElementById('regDescription').value.trim();
+				const emoji = document.getElementById('regEmoji').value;
+				const password = document.getElementById('regPassword').value;
+				const confirmPassword = document.getElementById('regConfirmPassword').value;
+				
+				// Валидация
+				if (!username.startsWith('@')) {
+					showNotification('Ошибка', 'Юзернейм должен начинаться с @', 'error');
+					return;
+				}
+				
+				if (password.length < 8) {
+					showNotification('Ошибка', 'Пароль должен быть не менее 8 символов', 'error');
+					return;
+				}
+				
+				if (password !== confirmPassword) {
+					showNotification('Ошибка', 'Пароли не совпадают', 'error');
+					return;
+				}
+				
+				try {
+					const { data: existingUser, error: checkError } = await supabase
+						.from('users')
+						.select('id')
+						.eq('username', username)
+						.single();
+					
+					if (existingUser) {
+						showNotification('Ошибка', 'Этот юзернейм уже занят', 'error');
+						return;
+					}
+					
+					const { data: newUser, error: insertError } = await supabase
+						.from('users')
+						.insert([{
+							username,
+							display_name: displayName,
+							email: email || null,
+							description: description || null,
+							emoji,
+							password_hash: password,
+							clan: emoji,
+							is_verified: false,
+							posts_count: 0,
+							followers_count: 0,
+							following_count: 0,
+							following: [],
+							followers: []
+						}])
+						.select()
+						.single();
+					
+					if (insertError) throw insertError;
+					
+					currentUser = newUser;
+					localStorage.setItem('mirror_user', JSON.stringify(currentUser));
+					await loadInitialData();
+					showMainApp();
+					
+					showNotification('Успех', 'Регистрация прошла успешно!', 'success');
+					
+				} catch (error) {
+					console.error('Ошибка регистрации:', error);
+					showNotification('Ошибка', 'Не удалось зарегистрироваться', 'error');
+				}
+			});
+			
+			// Переключение вкладок авторизации
+			document.getElementById('loginTab')?.addEventListener('click', () => {
+				document.getElementById('loginTab').classList.add('active');
+				document.getElementById('registerTab').classList.remove('active');
+				document.getElementById('loginForm').classList.add('active');
+				document.getElementById('registerForm').classList.remove('active');
+			});
+			
+			document.getElementById('registerTab')?.addEventListener('click', () => {
+				document.getElementById('registerTab').classList.add('active');
+				document.getElementById('loginTab').classList.remove('active');
+				document.getElementById('registerForm').classList.add('active');
+				document.getElementById('loginForm').classList.remove('active');
+			});
+			
+			// Создание поста
+			document.getElementById('publishPostBtn')?.addEventListener('click', async () => {
+				const content = document.getElementById('postText').value.trim();
+				if (!content) {
+					showNotification('Ошибка', 'Введите текст поста', 'error');
+					return;
+				}
+				
+				await createPost(content);
+			});
+			
+			// Выход
+			document.getElementById('logoutBtn')?.addEventListener('click', () => {
+				currentUser = null;
+				localStorage.removeItem('mirror_user');
+				showAuthPage();
+				showNotification('Информация', 'Вы вышли из системы', 'info');
+			});
+			
+			// Навигация
+			document.querySelectorAll('.nav-link').forEach(link => {
+				link.addEventListener('click', (e) => {
+					e.preventDefault();
+					const page = link.dataset.page;
+					if (page) showPage(page);
+				});
+			});
+			
+			// Логотип - переход на ленту
+			document.getElementById('homeLogo')?.addEventListener('click', (e) => {
+				e.preventDefault();
+				showPage('feed');
+			});
+			
+			// Просмотр своего профиля
+			document.getElementById('viewProfileBtn')?.addEventListener('click', () => {
+				if (currentUser) {
+					showUserProfile(currentUser.id);
+				}
+			});
+			
+			// Создание поста из пустой ленты
+			document.getElementById('emptyFeedPostBtn')?.addEventListener('click', () => {
+				document.getElementById('postText').focus();
+			});
+			
+			// Сохранение профиля
+			document.getElementById('saveProfileBtn')?.addEventListener('click', async () => {
+				const displayName = document.getElementById('editDisplayName').value.trim();
+				const bio = document.getElementById('editBio').value.trim();
+				const status = document.getElementById('editStatus').value.trim();
+				const emoji = document.getElementById('editEmoji').value;
+				
+				if (!displayName) {
+					showNotification('Ошибка', 'Введите имя', 'error');
+					return;
+				}
+				
+				try {
+					const { error } = await supabase
+						.from('users')
+						.update({
+							display_name: displayName,
+							description: bio,
+							status: status,
+							emoji: emoji,
+							clan: emoji,
+							updated_at: new Date().toISOString()
+						})
+						.eq('id', currentUser.id);
+					
+					if (error) throw error;
+					
+					// Обновляем локально
+					currentUser.display_name = displayName;
+					currentUser.description = bio;
+					currentUser.status = status;
+					currentUser.emoji = emoji;
+					currentUser.clan = emoji;
+					
+					// Сохраняем в localStorage
+					localStorage.setItem('mirror_user', JSON.stringify(currentUser));
+					
+					// Обновляем интерфейс
+					updateUI();
+					
+					// Закрываем модалку
+					document.getElementById('editProfileModal').classList.remove('active');
+					
+					showNotification('Успех', 'Профиль обновлен', 'success');
+					
+				} catch (error) {
+					console.error('Ошибка обновления профиля:', error);
+					showNotification('Ошибка', 'Не удалось обновить профиль', 'error');
+				}
+			});
+			
+			// Создание группы
+			document.getElementById('saveGroupBtn')?.addEventListener('click', async () => {
+				const name = document.getElementById('groupName').value.trim();
+				const username = document.getElementById('groupUsername').value.trim();
+				const description = document.getElementById('groupDescription').value.trim();
+				const emoji = document.getElementById('groupEmoji').value;
+				const type = document.querySelector('[data-group-type].active')?.dataset.groupType || 'group';
+				const privacy = document.querySelector('[data-privacy].active')?.dataset.privacy || 'public';
+				
+				if (!name || !username) {
+					showNotification('Ошибка', 'Заполните обязательные поля', 'error');
+					return;
+				}
+				
+				if (!username.startsWith('@')) {
+					showNotification('Ошибка', 'Юзернейм должен начинаться с @', 'error');
+					return;
+				}
+				
+				const groupData = {
+					name,
+					username,
+					description,
+					avatar: emoji,
+					type,
+					is_public: privacy === 'public',
+					is_verified: false
+				};
+				
+				const success = await createGroup(groupData);
+				if (success) {
+					document.getElementById('createGroupModal').classList.remove('active');
+				}
+			});
+			
+			// Поиск
+			document.getElementById('searchInput')?.addEventListener('input', (e) => {
+				const query = e.target.value.trim().toLowerCase();
+				if (query.length < 2) {
+					document.getElementById('searchResults')?.classList.add('hidden');
+					return;
+				}
+				
+				// Поиск пользователей, групп и сообществ
+				const users = allUsers.filter(u => 
+					u.username.toLowerCase().includes(query) || 
+					u.display_name.toLowerCase().includes(query)
+				).slice(0, 5);
+				
+				const groups = allGroups.filter(g => 
+					g.name.toLowerCase().includes(query) || 
+					g.username.toLowerCase().includes(query)
+				).slice(0, 5);
+				
+				const results = [...users, ...groups];
+				
+				const resultsContainer = document.getElementById('searchResults');
+				if (resultsContainer) {
+					if (results.length === 0) {
+						resultsContainer.innerHTML = '<div class="search-result-item text-muted p-3">Ничего не найдено</div>';
+					} else {
+						resultsContainer.innerHTML = results.map(item => `
+							<div class="search-result-item p-3 border-bottom cursor-pointer" data-id="${item.id}" data-type="${item.username ? 'user' : 'group'}">
+								<div class="d-flex align-center gap-3">
+									<div class="user-avatar">
+										<span>${item.emoji || item.avatar || '👤'}</span>
+									</div>
+									<div>
+										<div class="font-weight-medium">${item.username || item.name}</div>
+										<div class="text-muted small">${item.display_name || item.description?.slice(0, 50) || ''}</div>
+									</div>
+								</div>
+							</div>
+						`).join('');
+						
+						// Добавляем обработчики
+						resultsContainer.querySelectorAll('.search-result-item').forEach(item => {
+							item.addEventListener('click', () => {
+								const id = item.dataset.id;
+								const type = item.dataset.type;
+								
+								if (type === 'user') {
+									showUserProfile(id);
+								} else {
+									showGroupInfo(id);
+								}
+								
+								document.getElementById('searchResults').classList.add('hidden');
+								document.getElementById('searchInput').value = '';
+							});
+						});
+					}
+					
+					resultsContainer.classList.remove('hidden');
+				}
+			});
+			
+			// Запускаем приложение
+			await initApp();
+			
+			// Обновляем онлайн статус каждые 30 секунд
+			setInterval(() => {
+				updateOnlineStatus();
+			}, 30000);
+			
+			// Обновляем данные каждую минуту
+			setInterval(async () => {
+				if (currentUser) {
+					await loadInitialData();
+					updateUI();
+				}
+			}, 60000);
+		});
+	</script>
 </body>
 </html>
