@@ -2739,21 +2739,29 @@
 	<script>
 		// ========== КОНФИГУРАЦИЯ ==========
 		const SUPABASE_URL = 'https://kzbznupjamhualdewyxk.supabase.co';
-		const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6YnpudXBqYW1odWFsZGV3eXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgzNDY5OTQsImV4cCI6MjA1MzkyMjk5NH0.7Ll6UZ5BnQwJq9JYv2Z8X7Qw3y5X6Z8X7Qw3y5X6Z8';
-		
-		// НЕ СОЗДАЕМ НОВЫЙ КЛИЕНТ - используем уже созданный в глобальной области
-		// Если клиент еще не создан, создаем его с другим именем
-		let supabaseClient;
-		if (!window.supabaseClient && window.supabase) {
+		const SUPABASE_KEY = 'sb_publishable_VSXNcvoaf2meTwwR8gr80g_Y_YEhSgd';
+
+		// Проверяем, инициализирован ли уже клиент Supabase
+		if (!window.supabaseClient) {
+			// Создаем клиент Supabase только если он еще не создан
 			try {
-				window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+				window.supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 			} catch (error) {
 				console.error('Ошибка создания Supabase клиента:', error);
+				// Создаем заглушку для демо-режима
+				window.supabaseClient = {
+					from: () => ({ 
+						select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }),
+						insert: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }),
+						update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+						delete: () => ({ eq: () => Promise.resolve({ error: null }) })
+					})
+				};
 			}
 		}
-		
-		// Используем уже существующий клиент
-		const supabase = window.supabaseClient || window.supabase;
+
+		// Используем уже созданный клиент
+		const supabase = window.supabaseClient;
 		
 		// ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
 		let currentUser = null;
