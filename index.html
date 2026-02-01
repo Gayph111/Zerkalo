@@ -1507,11 +1507,7 @@
         </footer>
     </div>
 
-    <script>
-		// Supabase настройки
-		const supabaseUrl = 'https://kzbznupjamhualdewyxk.supabase.co';
-		const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6YnpudXBqYW1odWFsZGV3eXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgzNDY5OTQsImV4cCI6MjA1MzkyMjk5NH0.7Ll6UZ5BnQwJq9JYv2Z8X7Qw3y5X6Z8X7Qw3y5X6Z8';
-		const supabase = window.supabase.create({ supabaseUrl, supabaseKey });
+	<script>
 		// ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
 		let currentUser = null;
 		let allUsers = [];
@@ -1519,8 +1515,6 @@
 		let notifications = [];
 		let clans = {};
 		let onlineUsers = new Set();
-
-
 
 		// Эмодзи для выбора
 		const availableEmojis = ['😀', '😎', '🤖', '👻', '🐱', '🦊', '🐶', '🦁', '🚀', '🎨', '🎮', '🎵', '📸', '📚', '🍳', '🌍', '👨‍💻', '👩‍💻', '🧠', '💡', '🔥', '🌟', '🌙', '☀️', '🌈', '🍕', '⚽', '🎭', '🎸', '🎬'];
@@ -1602,7 +1596,7 @@
 		async function loadInitialData() {
 		  try {
 			// Загружаем пользователей
-			const { data: usersData, error: usersError } = await supabase
+			const {  usersData, error: usersError } = await supabase
 			  .from('users')
 			  .select('*')
 			  .order('created_at', { ascending: false });
@@ -1614,7 +1608,7 @@
 			allUsers = usersData || [];
 
 			// Загружаем посты
-			const { data: postsData, error: postsError } = await supabase
+			const {  postsData, error: postsError } = await supabase
 			  .from('posts')
 			  .select('*')
 			  .order('created_at', { ascending: false });
@@ -1748,7 +1742,7 @@
 			  }
 
 			  // Проверяем уникальность юзернейма
-			  const { data: existingUser, error: checkError } = await supabase
+			  const {  existingUser, error: checkError } = await supabase
 				.from('users')
 				.select('id')
 				.eq('username', username)
@@ -1760,7 +1754,7 @@
 			  }
 
 			  // Создание нового пользователя
-			  const { data: newUser, error: insertError } = await supabase
+			  const {  newUser, error: insertError } = await supabase
 				.from('users')
 				.insert([{
 				  username: username,
@@ -1820,7 +1814,7 @@
 			  }
 
 			  // Ищем пользователя по юзернейму и паролю
-			  const { data: user, error } = await supabase
+			  const {  user, error } = await supabase
 				.from('users')
 				.select('*')
 				.eq('username', username)
@@ -2091,7 +2085,7 @@
 		  const originalPost = allPosts.find(p => p.id === originalPostId);
 		  if (!originalPost) return;
 
-		  const { data: newPost, error } = await supabase
+		  const {  newPost, error } = await supabase
 			.from('posts')
 			.insert([{
 			  user_id: currentUser.id,
@@ -2415,7 +2409,7 @@
 		  if (!currentUser || !content.trim()) return;
 
 		  try {
-			const { data: newPost, error } = await supabase
+			const {  newPost, error } = await supabase
 			  .from('posts')
 			  .insert([{
 				user_id: currentUser.id,
