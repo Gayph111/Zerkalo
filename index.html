@@ -3203,59 +3203,37 @@
 		async function loadRecommendedUsers() {
 			const container = document.getElementById('recommendedUsersList');
 			if (!container || !currentUser) return;
-			
+
 			try {
-				// Исправленный запрос - без сортировки по несуществующему столбцу
-				const { data: notFollowing, error } = await supabaseClient
+				// Убираем сортировку по followers_count, так как она может быть пустой
+				const { data: users, error } = await supabaseClient
 					.from('users')
 					.select('*')
 					.neq('id', currentUser.id)
 					.order('created_at', { ascending: false })
 					.limit(5);
-				
+
 				if (error) throw error;
-				
-				if (!notFollowing || notFollowing.length === 0) {
-					container.innerHTML = '<div class="text-center text-muted py-3">Нет рекомендаций</div>';
-					return;
-				}
-				
-				container.innerHTML = notFollowing.map(user => `
-					<div class="recommended-user" data-user-id="${user.id}">
-						<div class="user-avatar">
-							<span>${user.emoji}</span>
+
+				container.innerHTML = users.map(user => `
+					<div class="recommended-user">
+						<div class="user-avatar-sm"><span>${user.emoji || '👤'}</span></div>
+						<div class="recommended-info">
+							<div class="recommended-name">${user.display_name}</div>
+							<div class="recommended-username">${user.username}</div>
 						</div>
-						<div class="recommended-user-info">
-							<div class="recommended-user-name">${user.username}</div>
-							<div class="recommended-user-bio">${user.description?.slice(0, 50) || 'Нет описания'}...</div>
-						</div>
-						<button class="btn btn-sm btn-primary follow-btn" data-user-id="${user.id}">
-							Подписаться
+						<button class="btn btn-primary btn-sm follow-btn" data-id="${user.id}">
+							<i class="fas fa-user-plus"></i>
 						</button>
 					</div>
 				`).join('');
-				
-				// Добавляем обработчики
-				container.querySelectorAll('.recommended-user').forEach(item => {
-					item.addEventListener('click', (e) => {
-						if (!e.target.classList.contains('follow-btn')) {
-							const userId = item.dataset.userId;
-							showUserProfile(userId);
-						}
-					});
-				});
-				
+
+				// Добавляем обработчики для кнопок подписки
 				container.querySelectorAll('.follow-btn').forEach(btn => {
-					btn.addEventListener('click', async (e) => {
-						e.stopPropagation();
-						const userId = btn.dataset.userId;
-						await toggleFollow(userId);
-					});
+					btn.addEventListener('click', () => toggleFollow(btn.dataset.id));
 				});
-				
 			} catch (error) {
 				console.error('Ошибка загрузки рекомендаций:', error);
-				container.innerHTML = '<div class="text-center text-muted py-3">Нет рекомендаций</div>';
 			}
 		}
 
@@ -4312,75 +4290,28 @@
 			}
 		}
 
-		async function toggleFollow(userId) {
-			if (!currentUser || !supabaseClient) {
-				showNotification('Ошибка', 'Войдите в систему', 'error');
-				return;
-			}
-			
+		async function toggleFollow(targetUserId) {
 			try {
-				// Проверяем, подписан ли уже пользователь
-				const { data: existingFollow, error: checkError } = await supabaseClient
+				// Проверяем, подписаны ли уже
+				const { data: existing } = await supabaseClient
 					.from('followers')
-					.select('id')
-					.eq('user_id', userId)
+					.select('*')
+					.eq('user_id', targetUserId)
 					.eq('follower_id', currentUser.id)
 					.single();
-				
-				if (existingFollow) {
-					// Удаляем подписку
-					const { error: deleteError } = await supabaseClient
-						.from('followers')
-						.delete()
-						.eq('user_id', userId)
-						.eq('follower_id', currentUser.id);
-					
-					if (deleteError) throw deleteError;
-					
-					// Обновляем интерфейс
-					const followBtn = document.querySelector(`.follow-btn[data-user-id="${userId}"]`);
-					if (followBtn) {
-						followBtn.innerHTML = '<i class="fas fa-user-plus"></i> Подписаться';
-						followBtn.classList.remove('btn-danger');
-						followBtn.classList.add('btn-primary');
-					}
-					
-					// Обновляем счетчики
-					await updateFollowCounters(userId, false);
-					
-					showNotification('Успех', 'Вы отписались', 'info');
-					
+
+				if (existing) {
+					await supabaseClient.from('followers').delete().eq('id', existing.id);
+					showNotification('Инфо', 'Вы отписались', 'info');
 				} else {
-					// Добавляем подписку
-					const { error: insertError } = await supabaseClient
-						.from('followers')
-						.insert([{
-							user_id: userId,
-							follower_id: currentUser.id
-						}]);
-					
-					if (insertError) throw insertError;
-					
-					// Обновляем интерфейс
-					const followBtn = document.querySelector(`.follow-btn[data-user-id="${userId}"]`);
-					if (followBtn) {
-						followBtn.innerHTML = '<i class="fas fa-user-minus"></i> Отписаться';
-						followBtn.classList.remove('btn-primary');
-						followBtn.classList.add('btn-danger');
-					}
-					
-					// Обновляем счетчики
-					await updateFollowCounters(userId, true);
-					
-					// Создаем уведомление
-					await createNotification(userId, 'follow');
-					
-					showNotification('Успех', 'Вы подписались', 'success');
+					await supabaseClient.from('followers').insert([
+						{ user_id: targetUserId, follower_id: currentUser.id }
+					]);
+					showNotification('Успех', 'Вы подписались!', 'success');
 				}
-				
+				showUserProfile(targetUserId); // Обновляем экран профиля
 			} catch (error) {
 				console.error('Ошибка подписки:', error);
-				showNotification('Ошибка', 'Не удалось выполнить действие', 'error');
 			}
 		}
 
@@ -4724,50 +4655,68 @@
 			}
 		}
 
-		async function startConversation(userId) {
-			if (!currentUser || !supabaseClient) {
-				showNotification('Ошибка', 'Войдите в систему', 'error');
-				return;
-			}
-			
+		async function startConversation(targetUserId) {
+			if (!currentUser || targetUserId === currentUser.id) return;
+
 			try {
-				// Исправленный запрос создания диалога
-				const { data: newConversation, error: convError } = await supabaseClient
+				// 1. Создаем запись диалога
+				const { data: conv, error: convErr } = await supabaseClient
 					.from('conversations')
-					.insert([{
-						is_group: false,
-						last_message: 'Диалог начат',
-						last_message_at: new Date().toISOString()
-					}])
+					.insert([{ is_group: false, last_message: 'Начало диалога' }])
 					.select()
 					.single();
-				
-				if (convError) throw convError;
-				
-				// Добавляем участников
-				await supabaseClient
+
+				if (convErr) throw convErr;
+
+				// 2. Добавляем обоих участников (себя и собеседника)
+				const { error: partErr } = await supabaseClient
 					.from('conversation_participants')
 					.insert([
-						{ conversation_id: newConversation.id, user_id: currentUser.id },
-						{ conversation_id: newConversation.id, user_id: userId }
+						{ conversation_id: conv.id, user_id: currentUser.id },
+						{ conversation_id: conv.id, user_id: targetUserId }
 					]);
-				
-				// Добавляем диалог в локальный список
-				const otherUser = allUsers.find(u => u.id === userId);
-				if (otherUser) {
-					newConversation.name = otherUser.display_name;
-					newConversation.avatar = otherUser.emoji;
-					newConversation.is_online = otherUser.is_online;
-					conversations.unshift(newConversation);
-				}
-				
-				// Переходим в сообщения и открываем диалог
+
+				if (partErr) throw partErr;
+
+				showNotification('Успех', 'Диалог начат', 'success');
+				await loadConversations();
 				showPage('messages');
-				await openConversation(newConversation.id);
-				
+				openChat(conv.id);
 			} catch (error) {
 				console.error('Ошибка создания диалога:', error);
-				showNotification('Ошибка', 'Не удалось начать диалог', 'error');
+				showNotification('Ошибка', 'Не удалось начать чат', 'error');
+			}
+		}
+		
+		async function updateProfile(event) {
+			event.preventDefault();
+			const displayName = document.getElementById('editDisplayName').value;
+			const bio = document.getElementById('editBio').value;
+			const emoji = document.getElementById('editEmojiInput').value; // Текущий эмодзи профиля
+
+			try {
+				const { data, error } = await supabaseClient
+					.from('users')
+					.update({
+						display_name: displayName,
+						description: bio,
+						emoji: emoji,
+						clan: emoji, // Синхронизируем клан с эмодзи, если нужно
+						updated_at: new Date().toISOString()
+					})
+					.eq('id', currentUser.id)
+					.select()
+					.single();
+
+				if (error) throw error;
+
+				currentUser = data;
+				localStorage.setItem('mirror_user', JSON.stringify(currentUser));
+				updateUI();
+				document.getElementById('editProfileModal').classList.remove('active');
+				showNotification('Успех', 'Профиль обновлен', 'success');
+			} catch (error) {
+				console.error('Ошибка профиля:', error);
 			}
 		}
 
