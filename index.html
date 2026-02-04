@@ -3304,6 +3304,23 @@
 				}
 			}
 			
+			function createPostHTML(post) {
+				return `
+				<div class="post" data-id="${post.id}">
+					<div class="post-actions">
+						<button onclick="toggleLike('${post.id}')" class="action-btn ${post.user_has_liked ? 'active' : ''}">
+							<i class="fa-regular fa-heart"></i> <span>${post.likes_count || 0}</span>
+						</button>
+						<button onclick="openComments('${post.id}')" class="action-btn">
+							<i class="fa-regular fa-comment"></i> <span>${post.comments_count || 0}</span>
+						</button>
+						<button onclick="repost('${post.id}')" class="action-btn">
+							<i class="fa-solid fa-retweet"></i> <span>${post.reposts_count || 0}</span>
+						</button>
+					</div>
+				</div>`;
+			}
+			
 			// Добавляем обработчики событий
 			addPostEventListeners();
 		}
@@ -3776,6 +3793,23 @@
 
 		// ========== СОЗДАНИЕ ПОСТА ==========
 		async function createPost(content, attachments = {}) {
+			const content = document.getElementById('postInput').value;
+			if (!content) return;
+
+			const { data, error } = await supabaseClient
+				.from('posts')
+				.insert([{
+					content: content,
+					user_id: currentUser.id,
+					// Передаем текущий эмодзи сразу, чтобы он закрепился за постом
+					media_type: currentUser.emoji 
+				}])
+				.select('*, user:users(*)'); // Важно подгрузить данные пользователя
+			
+			if (error) console.error(error);
+			else {
+				// Очистить ввод и обновить ленту
+			}
 			if (!currentUser || !supabaseClient) {
 				showNotification('Ошибка', 'Войдите в систему', 'error');
 				return false;
@@ -5952,6 +5986,24 @@
 		}
 
 		async function createGroup(groupData) {
+			async function createGroup(name, username, description, avatar) {
+				try {
+					const { data, error } = await supabaseClient
+						.from('groups')
+						.insert([{
+							name: name,
+							username: username,
+							description: description,
+							avatar: avatar || '👥', // Если эмодзи не выбрано
+							creator_id: currentUser.id
+						}]);
+					
+					if (error) throw error;
+					showNotification('Успех', 'Группа создана!');
+				} catch (e) {
+					console.error("Ошибка создания группы:", e);
+				}
+			}		
 			if (!currentUser || !supabaseClient) {
 				showNotification('Ошибка', 'Войдите в систему', 'error');
 				return false;
