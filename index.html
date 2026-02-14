@@ -2718,56 +2718,10 @@
 
 			<div class="post-content">
 				{{POST_BODY_PLACEHOLDER}}
-				
-				{{#if media_url}}
-				<div class="post-attachment mt-3">
-					{{#if media_type 'image'}}
-					<img src="{{media_url}}" alt="{{media_name}}" loading="lazy">
-					{{else media_type 'video'}}
-					<video controls style="width:100%; max-height:400px;">
-						<source src="{{media_url}}" type="video/mp4">
-					</video>
-					{{else media_type 'audio'}}
-					<div class="audio-player">
-						<div class="audio-info">{{media_name}}</div>
-						<audio controls style="width:100%;">
-							<source src="{{media_url}}" type="audio/mp3">
-						</audio>
-						<a href="{{media_url}}" download class="btn btn-sm btn-secondary mt-2">
-							<i class="fas fa-download"></i> Скачать
-						</a>
-					</div>
-					{{else}}
-					<div class="file-attachment">
-						<div class="attachment-info">
-							<i class="fas fa-file"></i>
-							<div>
-								<div>{{media_name}}</div>
-								<div class="text-muted">{{media_size}} • {{media_type}}</div>
-							</div>
-							<a href="{{media_url}}" download class="btn btn-sm btn-primary ml-auto">
-								<i class="fas fa-download"></i> Скачать
-							</a>
-						</div>
-					</div>
-					{{/if}}
-				</div>
-				{{/if}}
-
-				{{#if voice_url}}
-				<div class="voice-message mt-3">
-					<button class="voice-play-btn" data-voice-url="{{voice_url}}">
-						<i class="fas fa-play"></i>
-					</button>
-					<div class="voice-waveform">
-						<div class="voice-wave"></div>
-					</div>
-					<div class="voice-duration">{{formatVoiceDuration voice_duration}}</div>
-				</div>
-				{{/if}}
+				{{MEDIA_HTML}}
+				{{VOICE_HTML}}
 			</div>
 
-			<!-- Кнопки взаимодействия -->
 			<div class="post-actions-footer">
 				<button class="action-btn like-btn {{liked_class}}" data-post-id="{{id}}">
 					<i class="{{liked_icon}} fa-heart"></i>
@@ -2998,10 +2952,12 @@
 		const SUPABASE_URL = 'https://kzbznupjamhualdewyxk.supabase.co';
 		const SUPABASE_KEY = 'sb_publishable_VSXNcvoaf2meTwwR8gr80g_Y_YEhSgd';
 
-		// Инициализация Supabase
+		// Инициализация Supabase (global headers помогают избежать 406)
 		let supabaseClient;
 		try {
-			supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+			supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+				global: { headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' } }
+			});
 		} catch (error) {
 			console.error('Ошибка инициализации Supabase:', error);
 		}
@@ -3524,7 +3480,7 @@
 			if (post.is_repost && post.original_post_id) {
 				let origPost = post.original_post;
 				if (!origPost && supabaseClient) {
-					const { data } = await supabaseClient.from('posts').select('*, user:users(*)').eq('id', post.original_post_id).single();
+					const { data } = await supabaseClient.from('posts').select('*, user:users(*)').eq('id', post.original_post_id).maybeSingle();
 					origPost = data;
 				}
 				const origUser = origPost?.user || (origPost ? await getUserById(origPost.user_id) : null);
@@ -3532,6 +3488,25 @@
 				postBody = `<div class="repost-content"><div class="repost-original-author">${origUser?.username || '?'}</div><div class="repost-original-text">${origContent}</div></div>`;
 			} else {
 				postBody = (post.content || '').replace(/</g, '&lt;');
+			}
+			
+			// Медиа и голос — генерируем в JS, чтобы избежать вложенных {{#if}}
+			let mediaHtml = '';
+			if (post.media_url) {
+				const mt = post.media_type || 'file';
+				if (mt === 'image') {
+					mediaHtml = `<div class="post-attachment mt-3"><img src="${post.media_url}" alt="${(post.media_name || '').replace(/"/g, '&quot;')}" loading="lazy"></div>`;
+				} else if (mt === 'video') {
+					mediaHtml = `<div class="post-attachment mt-3"><video controls style="width:100%; max-height:400px;"><source src="${post.media_url}" type="video/mp4"></video></div>`;
+				} else if (mt === 'audio') {
+					mediaHtml = `<div class="post-attachment mt-3"><div class="audio-player"><div class="audio-info">${(post.media_name || '').replace(/</g, '&lt;')}</div><audio controls style="width:100%;"><source src="${post.media_url}" type="audio/mp3"></audio><a href="${post.media_url}" download class="btn btn-sm btn-secondary mt-2"><i class="fas fa-download"></i> Скачать</a></div></div>`;
+				} else {
+					mediaHtml = `<div class="post-attachment mt-3"><div class="file-attachment"><div class="attachment-info"><i class="fas fa-file"></i><div><div>${(post.media_name || '').replace(/</g, '&lt;')}</div><div class="text-muted">${formatFileSize(post.media_size || 0)} • ${post.media_type || 'file'}</div></div><a href="${post.media_url}" download class="btn btn-sm btn-primary ml-auto"><i class="fas fa-download"></i> Скачать</a></div></div></div>`;
+				}
+			}
+			let voiceHtml = '';
+			if (post.voice_url) {
+				voiceHtml = `<div class="voice-message mt-3"><button class="voice-play-btn" data-voice-url="${post.voice_url}"><i class="fas fa-play"></i></button><div class="voice-waveform"><div class="voice-wave"></div></div><div class="voice-duration">${formatVoiceDuration(post.voice_duration)}</div></div>`;
 			}
 			
 			// Проверяем лайки
@@ -3547,6 +3522,8 @@
 
 			let html = template
 				.replace(/\{\{POST_BODY_PLACEHOLDER\}\}/g, postBody)
+				.replace(/\{\{MEDIA_HTML\}\}/g, mediaHtml)
+				.replace(/\{\{VOICE_HTML\}\}/g, voiceHtml)
 				.replace(/\{\{user_status_class\}\}/g, userStatusClass)
 				.replace(/\{\{liked_class\}\}/g, likedClass)
 				.replace(/\{\{liked_icon\}\}/g, likedIcon)
@@ -3575,7 +3552,9 @@
 			
 			// Обработка условных блоков
 			html = html.replace(/\{\{#if ([^}]+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (match, condition, content) => {
+				const cond = condition.trim();
 				const conditions = {
+					'is_repost': post.is_repost,
 					'isRepost': post.is_repost,
 					'user.is_online': onlineUsers.has(user?.id),
 					'user.is_verified': user?.is_verified,
@@ -3586,8 +3565,7 @@
 					'media_type \'video\'': post.media_type === 'video',
 					'media_type \'audio\'': post.media_type === 'audio'
 				};
-				
-				return conditions[condition] ? content : '';
+				return (conditions[cond] ? content : '');
 			});
 			
 			// Удаляем оставшиеся выражения
@@ -3605,12 +3583,12 @@
 			let user = allUsers.find(u => u.id === userId);
 			
 			if (!user && supabaseClient) {
-				// Загружаем из базы
+				// Загружаем из базы (maybeSingle — не 406 при отсутствии)
 				const { data } = await supabaseClient
 					.from('users')
 					.select('*')
 					.eq('id', userId)
-					.single();
+					.maybeSingle();
 				
 				if (data) {
 					user = data;
@@ -4140,7 +4118,7 @@
 				user.followers_count = followersCount || 0;
 				user.following_count = followingCount || 0;
 				
-				// Проверяем, подписан ли текущий пользователь
+				// Проверяем, подписан ли текущий пользователь (maybeSingle — не 406 при отсутствии)
 				let isFollowing = false;
 				if (currentUser) {
 					const { data: isFollowingData } = await supabaseClient
@@ -4148,7 +4126,7 @@
 						.select('id')
 						.eq('user_id', userId)
 						.eq('follower_id', currentUser.id)
-						.single();
+						.maybeSingle();
 					
 					isFollowing = !!isFollowingData;
 				}
@@ -4372,21 +4350,25 @@
 			if (!container) return;
 			
 			try {
-				const { data: followers, error } = await supabaseClient
+				// Сначала получаем ID подписчиков (без join — совместимо с разными схемами)
+				const { data: followerRows, error } = await supabaseClient
 					.from('followers')
-					.select(`
-						follower:users!followers_follower_id_fkey(*)
-					`)
+					.select('follower_id')
 					.eq('user_id', userId);
 				
 				if (error) throw error;
 				
-				if (!followers || followers.length === 0) {
+				if (!followerRows || followerRows.length === 0) {
 					container.innerHTML = '<div class="text-center py-5 text-muted">Нет подписчиков</div>';
 					return;
 				}
 				
-				const users = followers.map(f => f.follower);
+				// Загружаем данные пользователей
+				const users = [];
+				for (const row of followerRows) {
+					const u = allUsers.find(x => x.id === row.follower_id) || await getUserById(row.follower_id);
+					if (u) users.push(u);
+				}
 				container.innerHTML = users.map(user => `
 					<div class="user-item" data-user-id="${user.id}">
 						<div class="d-flex align-center gap-3 p-3">
@@ -4434,21 +4416,24 @@
 			if (!container) return;
 			
 			try {
-				const { data: following, error } = await supabaseClient
+				// Получаем ID тех, на кого подписан (без join — совместимо с разными схемами)
+				const { data: followingRows, error } = await supabaseClient
 					.from('followers')
-					.select(`
-						user:users!followers_user_id_fkey(*)
-					`)
+					.select('user_id')
 					.eq('follower_id', userId);
 				
 				if (error) throw error;
 				
-				if (!following || following.length === 0) {
+				if (!followingRows || followingRows.length === 0) {
 					container.innerHTML = '<div class="text-center py-5 text-muted">Нет подписок</div>';
 					return;
 				}
 				
-				const users = following.map(f => f.user);
+				const users = [];
+				for (const row of followingRows) {
+					const u = allUsers.find(x => x.id === row.user_id) || await getUserById(row.user_id);
+					if (u) users.push(u);
+				}
 				container.innerHTML = users.map(user => `
 					<div class="user-item" data-user-id="${user.id}">
 						<div class="d-flex align-center gap-3 p-3">
@@ -4538,13 +4523,13 @@
 
 		async function toggleFollow(targetUserId, skipProfileRefresh = false) {
 			try {
-				// Проверяем, подписаны ли уже
+				// Проверяем, подписаны ли уже (maybeSingle — не 406 при отсутствии записи)
 				const { data: existing } = await supabaseClient
 					.from('followers')
 					.select('*')
 					.eq('user_id', targetUserId)
 					.eq('follower_id', currentUser.id)
-					.single();
+					.maybeSingle();
 
 				let isFollowing = false;
 				if (existing) {
@@ -5653,7 +5638,7 @@
 						.select('*')
 						.or(`username.eq.${username},email.eq.${username}`)
 						.eq('password_hash', password)
-						.single();
+						.maybeSingle();
 					
 					if (error || !user) {
 						showNotification('Ошибка', 'Неверные данные для входа', 'error');
