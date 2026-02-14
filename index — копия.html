@@ -730,18 +730,6 @@
             border-radius: var(--radius);
             border-left: 3px solid var(--primary-light);
         }
-        .repost-original-author {
-            font-size: 13px;
-            color: var(--primary);
-            font-weight: 600;
-            margin-bottom: 6px;
-        }
-        .repost-original-text {
-            color: var(--text);
-            font-size: 14px;
-            line-height: 1.5;
-            white-space: pre-wrap;
-        }
 
         /* Комментарии */
         .comments-section {
@@ -806,11 +794,6 @@
             margin-top: 16px;
         }
 
-        .comment-input-wrapper {
-            display: flex;
-            gap: 8px;
-            margin-top: 12px;
-        }
         .comment-input {
             flex: 1;
             padding: 10px 12px;
@@ -1068,13 +1051,6 @@
 
         .tab-content {
             padding: 24px;
-        }
-
-        .tab-pane {
-            display: none;
-        }
-        .tab-pane.active {
-            display: block;
         }
 
         /* Страница сообщений */
@@ -1856,126 +1832,6 @@
             .nav-link i {
                 font-size: 16px;
             }
-            
-            /* На мобильных скрываем левую панель (профиль) в ленте */
-            .main-content .left-panel {
-                display: none !important;
-            }
-            
-            .main-content {
-                grid-template-columns: 1fr !important;
-            }
-        }
-
-        /* Кнопка гамбургер-меню (только на мобильных) */
-        .hamburger-btn {
-            display: none;
-        }
-        @media (max-width: 768px) {
-            .hamburger-btn {
-                display: flex !important;
-            }
-            .nav-links {
-                display: none !important;
-            }
-            .search-container {
-                flex: 1;
-                max-width: none;
-            }
-        }
-
-        /* Мобильное боковое меню */
-        .mobile-sidebar {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            z-index: 2000;
-            pointer-events: none;
-        }
-        .mobile-sidebar.active {
-            display: block;
-            pointer-events: auto;
-        }
-        .mobile-sidebar-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.4);
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-        .mobile-sidebar.active .mobile-sidebar-overlay {
-            opacity: 1;
-        }
-        .mobile-sidebar-content {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 280px;
-            max-width: 85vw;
-            height: 100%;
-            background: var(--card-bg);
-            box-shadow: 4px 0 20px rgba(0,0,0,0.15);
-            transform: translateX(-100%);
-            transition: transform 0.3s;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-        }
-        .mobile-sidebar.active .mobile-sidebar-content {
-            transform: translateX(0);
-        }
-        .mobile-sidebar-header {
-            padding: 16px 20px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .mobile-sidebar-header h3 {
-            margin: 0;
-            font-size: 18px;
-        }
-        .mobile-sidebar-close {
-            font-size: 24px;
-            width: 40px;
-            height: 40px;
-        }
-        .mobile-sidebar-user {
-            padding: 24px 20px;
-            text-align: center;
-            border-bottom: 1px solid var(--border);
-        }
-        .mobile-sidebar-user .profile-avatar {
-            width: 64px;
-            height: 64px;
-            margin: 0 auto 12px;
-            font-size: 32px;
-        }
-        .mobile-sidebar-nav {
-            padding: 16px 0;
-        }
-        .mobile-nav-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 14px 20px;
-            color: var(--text);
-            text-decoration: none;
-            font-size: 16px;
-            transition: background 0.2s;
-        }
-        .mobile-nav-item:hover {
-            background: var(--secondary);
-        }
-        .mobile-nav-item i {
-            width: 24px;
-            text-align: center;
         }
 
         @media (min-width: 769px) and (max-width: 1024px) {
@@ -2159,10 +2015,6 @@
         <header>
             <div class="container">
                 <div class="header-content">
-                    <!-- Кнопка меню (мобильные) -->
-                    <button class="btn-icon hamburger-btn" id="hamburgerBtn" title="Меню" aria-label="Меню">
-                        <i class="fas fa-bars"></i>
-                    </button>
                     <!-- Логотип -->
                     <a href="#" class="logo" id="homeLogo">
                         <i class="fas fa-mirror logo-icon"></i>
@@ -2212,31 +2064,6 @@
                             <i class="fas fa-sign-out-alt"></i>
                         </button>
                     </div>
-                </div>
-            </div>
-            
-            <!-- Мобильное боковое меню -->
-            <div class="mobile-sidebar" id="mobileSidebar">
-                <div class="mobile-sidebar-overlay" id="mobileSidebarOverlay"></div>
-                <div class="mobile-sidebar-content">
-                    <div class="mobile-sidebar-header">
-                        <h3>Меню</h3>
-                        <button class="btn-icon mobile-sidebar-close" id="mobileSidebarClose">&times;</button>
-                    </div>
-                    <div class="mobile-sidebar-user" id="mobileSidebarUser">
-                        <div class="profile-avatar">
-                            <span id="mobileProfileEmoji">😀</span>
-                        </div>
-                        <div class="user-name" id="mobileProfileName">Пользователь</div>
-                        <div class="user-username" id="mobileProfileUsername">@user</div>
-                    </div>
-                    <nav class="mobile-sidebar-nav">
-                        <a href="#" class="mobile-nav-item" data-page="feed"><i class="fas fa-home"></i> Лента</a>
-                        <a href="#" class="mobile-nav-item" data-page="messages"><i class="fas fa-comments"></i> Сообщения</a>
-                        <a href="#" class="mobile-nav-item" data-page="groups"><i class="fas fa-users"></i> Группы</a>
-                        <a href="#" class="mobile-nav-item" data-page="notifications"><i class="fas fa-bell"></i> Уведомления</a>
-                        <a href="#" class="mobile-nav-item" id="mobileViewProfile"><i class="fas fa-user"></i> Мой профиль</a>
-                    </nav>
                 </div>
             </div>
         </header>
@@ -2691,7 +2518,7 @@
                 <div class="post-author">
                     <div class="user-avatar cursor-pointer view-profile" data-user-id="{{user.id}}">
                         <span>{{user.emoji}}</span>
-                        <div class="status-indicator {{user_status_class}}"></div>
+                        <div class="status-indicator {{#if user.is_online}}status-online{{else}}status-offline{{/if}}"></div>
                     </div>
                     <div class="post-author-info">
                         <div class="post-author-name">
@@ -2717,7 +2544,7 @@
             </div>
 
 			<div class="post-content">
-				{{POST_BODY_PLACEHOLDER}}
+				{{content}}
 				
 				{{#if media_url}}
 				<div class="post-attachment mt-3">
@@ -2769,8 +2596,8 @@
 
 			<!-- Кнопки взаимодействия -->
 			<div class="post-actions-footer">
-				<button class="action-btn like-btn {{liked_class}}" data-post-id="{{id}}">
-					<i class="{{liked_icon}} fa-heart"></i>
+				<button class="action-btn like-btn {{#if liked}}liked{{/if}}" data-post-id="{{id}}">
+					<i class="{{#if liked}}fas{{else}}far{{/if}} fa-heart"></i>
 					<span class="action-count">{{likes_count}}</span>
 				</button>
 				<button class="action-btn comment-btn" data-post-id="{{id}}">
@@ -2784,17 +2611,6 @@
 				<button class="action-btn share-btn" data-post-id="{{id}}">
 					<i class="fas fa-share"></i>
 				</button>
-			</div>
-			
-			<!-- Секция комментариев (скрыта по умолчанию) -->
-			<div class="comments-section hidden" id="comments-{{id}}">
-				<div class="comments-list" id="comments-list-{{id}}"></div>
-				<div class="comment-input-wrapper">
-					<input type="text" class="comment-input" data-post-id="{{id}}" placeholder="Написать комментарий...">
-					<button class="btn btn-primary btn-sm send-comment-btn" data-post-id="{{id}}">
-						<i class="fas fa-paper-plane"></i>
-					</button>
-				</div>
 			</div>
 		</div>
 	</script>
@@ -2865,7 +2681,14 @@
 						<i class="fas fa-camera"></i>
 					</button>
 					{{else}}
-					{{FOLLOW_BUTTON_PLACEHOLDER}}
+					<button class="btn {{#if is_following}}btn-danger{{else}}btn-primary{{/if}} follow-btn" 
+							data-user-id="{{id}}">
+						{{#if is_following}}
+						<i class="fas fa-user-minus"></i> Отписаться
+						{{else}}
+						<i class="fas fa-user-plus"></i> Подписаться
+						{{/if}}
+					</button>
 					<button class="btn btn-secondary message-btn" data-user-id="{{id}}">
 						<i class="fas fa-envelope"></i> Сообщение
 					</button>
@@ -3138,7 +2961,7 @@
 					allUsers = users || [];
 				}
 				
-				// Загружаем посты (репосты загружают оригинал при рендере)
+				// Загружаем посты
 				const { data: posts, error: postsError } = await supabaseClient
 					.from('posts')
 					.select(`
@@ -3276,19 +3099,13 @@
 							conv.name = otherUser.display_name;
 							conv.avatar = otherUser.emoji;
 							conv.is_online = otherUser.is_online;
-							conv.other_user_id = otherUser.id; // Для перехода в профиль
 						}
 					}
 					
 					// Если открыта страница сообщений, обновляем список
 					if (document.getElementById('messagesPage') && 
 						!document.getElementById('messagesPage').classList.contains('hidden')) {
-						const openConvId = currentConversation?.id; // Сохраняем открытый диалог
 						renderConversations();
-						// Восстанавливаем открытый диалог после перерисовки
-						if (openConvId) {
-							setTimeout(() => openConversation(openConvId), 0);
-						}
 					}
 				}
 			} catch (error) {
@@ -3417,7 +3234,7 @@
 				container.querySelectorAll('.follow-btn').forEach(btn => {
 					btn.addEventListener('click', async () => {
 						const userId = btn.dataset.userId;
-						if (userId) await toggleFollow(userId, true); // Остаёмся на ленте, обновляем только кнопку
+						if (userId) await toggleFollow(userId);
 					});
 				});
 			} catch (error) {
@@ -3516,23 +3333,8 @@
 		async function createPostElement(post) {
 			const template = document.getElementById('postTemplate').innerHTML;
 			
-			// Получаем информацию о пользователе (для репоста — пользователь, который репостнул)
+			// Получаем информацию о пользователе
 			const user = post.user || await getUserById(post.user_id);
-			
-			// Тело поста: для репоста — оригинал, иначе — контент
-			let postBody = '';
-			if (post.is_repost && post.original_post_id) {
-				let origPost = post.original_post;
-				if (!origPost && supabaseClient) {
-					const { data } = await supabaseClient.from('posts').select('*, user:users(*)').eq('id', post.original_post_id).single();
-					origPost = data;
-				}
-				const origUser = origPost?.user || (origPost ? await getUserById(origPost.user_id) : null);
-				const origContent = (origPost?.content || '').replace(/</g, '&lt;');
-				postBody = `<div class="repost-content"><div class="repost-original-author">${origUser?.username || '?'}</div><div class="repost-original-text">${origContent}</div></div>`;
-			} else {
-				postBody = (post.content || '').replace(/</g, '&lt;');
-			}
 			
 			// Проверяем лайки
 			let isLiked = false;
@@ -3541,15 +3343,7 @@
 			}
 			
 			// Формируем HTML
-			const userStatusClass = onlineUsers.has(user?.id) ? 'status-online' : 'status-offline';
-			const likedClass = isLiked ? 'liked' : '';
-			const likedIcon = isLiked ? 'fas' : 'far';
-
 			let html = template
-				.replace(/\{\{POST_BODY_PLACEHOLDER\}\}/g, postBody)
-				.replace(/\{\{user_status_class\}\}/g, userStatusClass)
-				.replace(/\{\{liked_class\}\}/g, likedClass)
-				.replace(/\{\{liked_icon\}\}/g, likedIcon)
 				.replace(/\{\{id\}\}/g, post.id)
 				.replace(/\{\{isRepost\}\}/g, post.is_repost ? 'true' : '')
 				.replace(/\{\{user\.id\}\}/g, user?.id || '')
@@ -4194,15 +3988,9 @@
 			
 			const isOwnProfile = currentUser && currentUser.id === user.id;
 			
-			// Кнопка подписки — вставляем напрямую, чтобы избежать проблем с шаблоном
-			const followBtnHtml = isFollowing
-				? `<button class="btn btn-danger follow-btn" data-user-id="${user.id}"><i class="fas fa-user-minus"></i> Отписаться</button>`
-				: `<button class="btn btn-primary follow-btn" data-user-id="${user.id}"><i class="fas fa-user-plus"></i> Подписаться</button>`;
-			
 			// Загружаем шаблон
 			const template = document.getElementById('profileTemplate').innerHTML;
 			let html = template
-				.replace(/\{\{FOLLOW_BUTTON_PLACEHOLDER\}\}/g, followBtnHtml)
 				.replace(/\{\{id\}\}/g, user.id)
 				.replace(/\{\{username\}\}/g, user.username)
 				.replace(/\{\{display_name\}\}/g, user.display_name)
@@ -4286,17 +4074,14 @@
 		}
 
 		function setupProfileTabs(userId) {
-			// Обработчики для вкладок профиля — только внутри .profile-tabs
-			const profileTabs = document.querySelector('.profile-tabs');
-			if (!profileTabs) return;
-
-			profileTabs.querySelectorAll('.tab').forEach(tab => {
+			// Обработчики для вкладок профиля
+			document.querySelectorAll('.profile-tabs .tab').forEach(tab => {
 				tab.addEventListener('click', async () => {
 					const tabName = tab.dataset.tab;
 					
-					// Скрываем все панели и снимаем активность с табов
-					profileTabs.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-					profileTabs.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+					// Активируем таб
+					document.querySelectorAll('.profile-tabs .tab').forEach(t => t.classList.remove('active'));
+					document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
 					
 					tab.classList.add('active');
 					
@@ -4316,10 +4101,6 @@
 							break;
 						case 'following':
 							await loadFollowingTab(userId);
-							break;
-						case 'posts':
-						case 'reposts':
-							// Уже загружены при рендере профиля
 							break;
 					}
 				});
@@ -4496,7 +4277,7 @@
 			const followBtn = document.querySelector('.follow-btn');
 			if (followBtn && !isOwnProfile) {
 				followBtn.addEventListener('click', async () => {
-					await toggleFollow(userId, true); // true = обновить только кнопку, без перезагрузки профиля
+					await toggleFollow(userId);
 				});
 			}
 			
@@ -4536,7 +4317,7 @@
 			}
 		}
 
-		async function toggleFollow(targetUserId, skipProfileRefresh = false) {
+		async function toggleFollow(targetUserId) {
 			try {
 				// Проверяем, подписаны ли уже
 				const { data: existing } = await supabaseClient
@@ -4546,43 +4327,18 @@
 					.eq('follower_id', currentUser.id)
 					.single();
 
-				let isFollowing = false;
 				if (existing) {
 					await supabaseClient.from('followers').delete().eq('id', existing.id);
 					showNotification('Инфо', 'Вы отписались', 'info');
-					isFollowing = false;
 				} else {
 					await supabaseClient.from('followers').insert([
 						{ user_id: targetUserId, follower_id: currentUser.id }
 					]);
 					showNotification('Успех', 'Вы подписались!', 'success');
-					isFollowing = true;
 				}
-				
-				// Обновляем кнопку подписки на странице профиля
-				const followBtn = document.querySelector('.follow-btn[data-user-id="' + targetUserId + '"]');
-				if (followBtn) {
-					if (isFollowing) {
-						followBtn.className = 'btn btn-danger follow-btn';
-						followBtn.dataset.userId = targetUserId;
-						followBtn.innerHTML = '<i class="fas fa-user-minus"></i> Отписаться';
-					} else {
-						followBtn.className = 'btn btn-primary follow-btn';
-						followBtn.dataset.userId = targetUserId;
-						followBtn.innerHTML = '<i class="fas fa-user-plus"></i> Подписаться';
-					}
-				}
-				
-				// Обновляем счётчики
-				await updateFollowCounters(targetUserId, isFollowing);
-				
-				if (!skipProfileRefresh) {
-					// Полное обновление экрана профиля (перезагрузит данные и покажет правильную кнопку)
-					showUserProfile(targetUserId);
-				}
+				showUserProfile(targetUserId); // Обновляем экран профиля
 			} catch (error) {
 				console.error('Ошибка подписки:', error);
-				showNotification('Ошибка', 'Не удалось выполнить действие', 'error');
 			}
 		}
 
@@ -4788,24 +4544,13 @@
 					messageInputContainer.classList.remove('hidden');
 				}
 				
-				// Обновляем заголовок с кликабельным профилем собеседника
+				// Обновляем заголовок
 				const messagesHeader = document.querySelector('.messages-header .chat-user-details');
 				if (messagesHeader) {
-					const otherUserId = conversation.other_user_id;
-					const profileLink = otherUserId 
-						? `<h3 class="cursor-pointer view-profile" data-user-id="${otherUserId}" title="Открыть профиль">${conversation.name || 'Диалог'}</h3>`
-						: `<h3>${conversation.name || 'Диалог'}</h3>`;
 					messagesHeader.innerHTML = `
-						${profileLink}
+						<h3>${conversation.name || 'Диалог'}</h3>
 						<p>${conversation.is_online ? 'В сети' : 'Был(а) недавно'}</p>
 					`;
-					// Обработчик клика по имени для перехода в профиль
-					const profileLinkEl = messagesHeader.querySelector('.view-profile');
-					if (profileLinkEl) {
-						profileLinkEl.addEventListener('click', () => {
-							showUserProfile(otherUserId);
-						});
-					}
 				}
 				
 				// Загружаем сообщения
@@ -4925,17 +4670,8 @@
 				// Обновляем интерфейс
 				renderMessages();
 				
-				// Обновляем last_message в локальном объекте диалога
-				currentConversation.last_message = content.length > 50 ? content.substring(0, 50) + '...' : content;
-				currentConversation.last_message_at = new Date().toISOString();
-				
-				// НЕ вызываем loadConversations здесь — это пересоздаёт весь DOM и закрывает диалог
-				// Просто обновляем последнее сообщение в списке диалогов, если видно
-				const activeConvItem = document.querySelector(`.conversation-item[data-conversation-id="${currentConversation.id}"]`);
-				if (activeConvItem) {
-					const lastMsgEl = activeConvItem.querySelector('.conversation-last-message');
-					if (lastMsgEl) lastMsgEl.textContent = currentConversation.last_message;
-				}
+				// Перезагружаем список диалогов
+				await loadConversations();
 				
 				return true;
 				
@@ -5806,52 +5542,6 @@
 				showPage('feed');
 			});
 			
-			// Мобильное гамбургер-меню
-			const hamburgerBtn = document.getElementById('hamburgerBtn');
-			const mobileSidebar = document.getElementById('mobileSidebar');
-			const mobileSidebarClose = document.getElementById('mobileSidebarClose');
-			const mobileSidebarOverlay = document.getElementById('mobileSidebarOverlay');
-			if (hamburgerBtn && mobileSidebar) {
-				hamburgerBtn.addEventListener('click', () => {
-					mobileSidebar.classList.add('active');
-					document.body.style.overflow = 'hidden';
-					// Обновляем данные пользователя в меню
-					if (currentUser) {
-						const emojiEl = document.getElementById('mobileProfileEmoji');
-						const nameEl = document.getElementById('mobileProfileName');
-						const usernameEl = document.getElementById('mobileProfileUsername');
-						if (emojiEl) emojiEl.textContent = currentUser.emoji || '😀';
-						if (nameEl) nameEl.textContent = currentUser.display_name || 'Пользователь';
-						if (usernameEl) usernameEl.textContent = currentUser.username || '@user';
-					}
-				});
-			}
-			const closeMobileSidebar = () => {
-				if (mobileSidebar) {
-					mobileSidebar.classList.remove('active');
-					document.body.style.overflow = '';
-				}
-			};
-			mobileSidebarClose?.addEventListener('click', closeMobileSidebar);
-			mobileSidebarOverlay?.addEventListener('click', closeMobileSidebar);
-			document.querySelectorAll('.mobile-nav-item').forEach(item => {
-				item.addEventListener('click', (e) => {
-					e.preventDefault();
-					const page = item.dataset.page;
-					if (page) {
-						showPage(page);
-						closeMobileSidebar();
-					}
-				});
-			});
-			document.getElementById('mobileViewProfile')?.addEventListener('click', (e) => {
-				e.preventDefault();
-				if (currentUser) {
-					showUserProfile(currentUser.id);
-					closeMobileSidebar();
-				}
-			});
-			
 			// Просмотр своего профиля
 			document.getElementById('viewProfileBtn')?.addEventListener('click', () => {
 				if (currentUser) {
@@ -6304,19 +5994,6 @@
 				return false;
 			}
 			
-			// Проверка уникальности юзернейма до вставки
-			try {
-				const { data: existingGroup } = await supabaseClient
-					.from('groups')
-					.select('id')
-					.eq('username', groupData.username)
-					.single();
-				if (existingGroup) {
-					showNotification('Ошибка', 'Группа с таким юзернеймом уже существует. Выберите другой.', 'error');
-					return false;
-				}
-			} catch (e) { /* игнорируем - группа не найдена, можно создавать */ }
-			
 			try {
 				// Создаем группу
 				const { data: newGroup, error: groupError } = await supabaseClient
@@ -6324,8 +6001,8 @@
 					.insert([{
 						name: groupData.name,
 						username: groupData.username,
-						description: groupData.description || '',
-						avatar: groupData.avatar || '👥',
+						description: groupData.description,
+						avatar: groupData.avatar,
 						type: groupData.type || 'group',
 						is_public: groupData.privacy === 'public',
 						creator_id: currentUser.id,
@@ -6334,13 +6011,7 @@
 					.select()
 					.single();
 				
-				if (groupError) {
-					if (groupError.code === '23505') {
-						showNotification('Ошибка', 'Группа с таким юзернеймом уже существует', 'error');
-						return false;
-					}
-					throw groupError;
-				}
+				if (groupError) throw groupError;
 				
 				// Добавляем создателя в участники
 				const { error: memberError } = await supabaseClient
@@ -6351,17 +6022,7 @@
 						role: 'admin'
 					}]);
 				
-				if (memberError) {
-					console.error('Ошибка добавления в группу:', memberError);
-					if (memberError.code === '42501' || memberError.message?.includes('row-level security')) {
-						showNotification('Ошибка', 'Настройте RLS в Supabase: разрешите INSERT в group_members для аутентифицированных пользователей.', 'error');
-					} else {
-						showNotification('Ошибка', memberError.message || 'Не удалось добавить в группу', 'error');
-					}
-					// Группа создана, но создатель не добавлен — удаляем группу
-					await supabaseClient.from('groups').delete().eq('id', newGroup.id);
-					return false;
-				}
+				if (memberError) throw memberError;
 				
 				// Обновляем локальный список групп
 				allGroups.unshift(newGroup);
